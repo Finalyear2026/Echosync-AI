@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:archive/archive.dart';
+import 'package:path/path.dart' as p;
 
 /// Manages downloading and storage of AI model files.
 /// Supports resumable downloads with progress tracking.
@@ -10,7 +13,39 @@ class ModelManagerService {
   final Map<String, double> _downloadProgress = {};
   final Map<String, CancelToken> _cancelTokens = {};
 
-  /// Model definitions
+  static const String registryDriveId = '1sMAYeFQlzuya_ncuj0fz9XkypVd8J9S0';
+  
+  /// Get direct download link for Google Drive ID
+  String _getDriveDownloadUrl(String fileId) => 
+      'https://drive.google.com/uc?export=download&id=$fileId';
+
+  /// Fetch the cloud registry from Google Drive
+  Future<Map<String, dynamic>> fetchCloudRegistry() async {
+    try {
+      final response = await _dio.get(
+        _getDriveDownloadUrl(registryDriveId),
+        options: Options(
+          receiveTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 15),
+        ),
+      );
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data is Map<String, dynamic>) {
+          return data;
+        } else if (data is String) {
+          return jsonDecode(data) as Map<String, dynamic>;
+        }
+        throw Exception('Unexpected response format: ${data.runtimeType}');
+      }
+      throw Exception('Failed to fetch registry: ${response.statusCode}');
+    } catch (e) {
+      debugPrint('ModelManager: Registry fetch error: $e');
+      rethrow;
+    }
+  }
+
+  /// Model definitions (Static fallbacks)
   static const Map<String, ModelInfo> models = {
     'whisper-base': ModelInfo(
       name: 'Whisper Base',
@@ -101,69 +136,103 @@ class ModelManagerService {
   /// Get download progress for a model (0.0 to 1.0)
   double getProgress(String modelKey) => _downloadProgress[modelKey] ?? 0.0;
 
-  /// Download a model file with progress tracking
+  /// Download a model file with progress tracking and resume support
   Future<String> downloadModel(
     String modelKey, {
+    String? driveId,
+    bool isZip = false,
     ValueChanged<double>? onProgress,
   }) async {
     final info = models[modelKey];
-    if (info == null) throw ArgumentError('Unknown model: $modelKey');
+    final filename = info?.filename ?? (isZip ? '$modelKey.zip' : '$modelKey.bin');
+    final expectedSize = info?.sizeBytes ?? 0;
 
-    final filePath = '${await modelsDir}/${info.filename}';
+    final modelsDirPath = await modelsDir;
+    final filePath = '$modelsDirPath/$filename';
     final file = File(filePath);
+    final tempPath = '$filePath.part';
+    final tempFile = File(tempPath);
 
-    // If exists but invalid size, delete and start fresh
-    if (file.existsSync() && await file.length() < info.sizeBytes * 0.9) {
-      debugPrint('ModelManager: Deleting partial file for $modelKey before redownload');
+    // 1. Check if already downloaded and valid
+    if (file.existsSync()) {
+      final size = await file.length();
+      if (size >= expectedSize * 0.95) {
+        _downloadProgress[modelKey] = 1.0;
+        onProgress?.call(1.0);
+        return filePath;
+      }
+      // If file exists but is too small, delete it and use temp logic
       await file.delete();
     }
 
-    // Already downloaded and valid
-    if (file.existsSync() && await file.length() >= info.sizeBytes * 0.9) {
-      _downloadProgress[modelKey] = 1.0;
-      onProgress?.call(1.0);
-      debugPrint('ModelManager: $modelKey already downloaded and valid at $filePath');
-      return filePath;
+    // 2. Resume logic
+    int existingLength = 0;
+    if (tempFile.existsSync()) {
+      existingLength = await tempFile.length();
     }
-
-    debugPrint('ModelManager: Starting download of $modelKey from ${info.url}');
 
     final cancelToken = CancelToken();
     _cancelTokens[modelKey] = cancelToken;
-    _downloadProgress[modelKey] = 0.0;
+    
+    final url = driveId != null ? _getDriveDownloadUrl(driveId) : (info?.url ?? '');
 
     try {
       await _dio.download(
-        info.url,
-        filePath,
+        url,
+        tempPath,
         cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
-          if (total > 0) {
-            final progress = received / total;
-            _downloadProgress[modelKey] = progress;
-            onProgress?.call(progress);
-          }
+          final progress = (existingLength + received) / (existingLength + total);
+          _downloadProgress[modelKey] = progress;
+          onProgress?.call(progress);
         },
         options: Options(
+          headers: existingLength > 0 ? {'range': 'bytes=$existingLength-'} : null,
           receiveTimeout: const Duration(hours: 2),
-          sendTimeout: const Duration(minutes: 5),
+          responseType: ResponseType.stream,
         ),
+        deleteOnError: false, // Keep partial file for resume
       );
+
+      // 3. Finalize file
+      await tempFile.rename(filePath);
+      
+      // 4. Handle Zip extraction
+      if (isZip) {
+        await _extractZip(filePath, modelsDirPath);
+      }
 
       _downloadProgress[modelKey] = 1.0;
       onProgress?.call(1.0);
-      debugPrint('ModelManager: $modelKey downloaded successfully to $filePath');
       return filePath;
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
-        debugPrint('ModelManager: Download of $modelKey cancelled');
         throw Exception('Download cancelled');
       }
-      debugPrint('ModelManager: Download error for $modelKey: ${e.message}');
       rethrow;
     } finally {
       _cancelTokens.remove(modelKey);
     }
+  }
+
+  /// Extract zip file to directory
+  Future<void> _extractZip(String zipPath, String targetDir) async {
+    final bytes = await File(zipPath).readAsBytes();
+    final archive = ZipDecoder().decodeBytes(bytes);
+
+    for (final file in archive) {
+      final filename = file.name;
+      if (file.isFile) {
+        final data = file.content as List<int>;
+        File('$targetDir/$filename')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(data);
+      } else {
+        Directory('$targetDir/$filename').createSync(recursive: true);
+      }
+    }
+    // Delete zip after extraction to save space
+    await File(zipPath).delete();
   }
 
   /// Cancel a running download

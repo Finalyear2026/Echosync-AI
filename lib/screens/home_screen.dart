@@ -7,6 +7,8 @@ import '../widgets/record_button.dart';
 import '../widgets/processing_indicator.dart';
 import '../widgets/transcription_display.dart';
 import 'settings_screen.dart';
+import 'models_screen.dart';
+
 
 /// Main home screen — single-page design with record button and result display.
 class HomeScreen extends StatelessWidget {
@@ -121,6 +123,25 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          // Models button (NEW in v0.2.0)
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.cloud_queue_rounded, size: 20),
+              color: AppTheme.accentCyan,
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const ModelsScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
           // Settings button
           Container(
             decoration: BoxDecoration(
@@ -152,13 +173,13 @@ class HomeScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-                'Please download required AI models first in Settings.'),
+                'Please download required AI models first.'),
             action: SnackBarAction(
-              label: 'Settings',
+              label: 'Models',
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (context) => const SettingsScreen(),
+                    builder: (context) => const ModelsScreen(),
                   ),
                 );
               },
@@ -172,6 +193,7 @@ class HomeScreen extends StatelessWidget {
     provider.toggleRecording();
   }
 }
+
 
 class _StatusBadge extends StatelessWidget {
   final AppProvider provider;

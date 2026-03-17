@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/processing_state.dart';
-import '../services/model_manager_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/model_download_card.dart';
+
 
 /// Settings screen with dictionary, snippets, style/tone, and model management.
 class SettingsScreen extends StatelessWidget {
@@ -26,13 +25,14 @@ class SettingsScreen extends StatelessWidget {
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       children: [
-                        _SectionHeader(title: 'Transcription', icon: Icons.subtitles_rounded),
-                        _TranscriptionSettings(provider: provider),
-                        const SizedBox(height: 24),
+                         _SectionHeader(title: 'Transcription', icon: Icons.subtitles_rounded),
+                         _TranscriptionSettings(provider: provider),
+                         const SizedBox(height: 24),
 
-                        _SectionHeader(title: 'AI Models', icon: Icons.psychology_rounded),
-                        _ModelSettings(provider: provider),
-                        const SizedBox(height: 24),
+                         _SectionHeader(title: 'Personal Dictionary', icon: Icons.spellcheck_rounded),
+                         _DictionarySection(provider: provider),
+                         const SizedBox(height: 24),
+
 
                         _SectionHeader(title: 'Personal Dictionary', icon: Icons.spellcheck_rounded),
                         _DictionarySection(provider: provider),
@@ -230,35 +230,7 @@ class _SettingsRow extends StatelessWidget {
   }
 }
 
-// --- Model Settings ---
-class _ModelSettings extends StatelessWidget {
-  final AppProvider provider;
 
-  const _ModelSettings({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: ModelManagerService.models.entries.map((entry) {
-        final key = entry.key;
-        final info = entry.value;
-        final isDownloaded = provider.modelStatuses[key] ?? false;
-        final isDownloading = provider.currentlyDownloading == key;
-        final progress = provider.downloadProgress[key] ?? 0.0;
-
-        return ModelDownloadCard(
-          modelKey: key,
-          modelInfo: info,
-          isDownloaded: isDownloaded,
-          downloadProgress: progress,
-          isDownloading: isDownloading,
-          onDownload: () => provider.downloadModel(key),
-          onCancel: () => provider.cancelDownload(key),
-        );
-      }).toList(),
-    );
-  }
-}
 
 // --- Dictionary Section ---
 class _DictionarySection extends StatelessWidget {

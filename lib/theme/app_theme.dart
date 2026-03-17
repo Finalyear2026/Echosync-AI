@@ -21,6 +21,10 @@ class AppTheme {
   static const Color warning = Color(0xFFF59E0B);
   static const Color recording = Color(0xFFEF4444);
 
+  // Getters for common colors
+  static Color get backgroundColor => surfaceDark;
+  static Color get accentColor => accentCyan;
+
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [primaryPurple, accentCyan],

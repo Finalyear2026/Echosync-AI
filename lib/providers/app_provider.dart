@@ -19,12 +19,20 @@ class AppProvider extends ChangeNotifier {
   String? _errorMessage;
   bool _isInitialized = false;
   Duration _recordingDuration = Duration.zero;
-
-  // Model download state
-  final Map<String, double> _downloadProgress = {};
   final Map<String, bool> _modelStatuses = {};
+
+  // Cloud Registry
+  List<dynamic> _cloudCategories = [];
   bool _isDownloading = false;
   String? _currentlyDownloading;
+  final Map<String, double> _downloadProgress = {};
+  
+  // Registry state
+  bool _isRegistryLoading = false;
+  String? _registryError;
+  
+  // Selection state
+  final Map<String, String> _activeModels = {}; // categoryId -> modelId
 
   AppProvider({
     required PipelineService pipeline,
@@ -55,6 +63,19 @@ class AppProvider extends ChangeNotifier {
   List<DictionaryEntry> get dictionary =>
       _isInitialized ? _settings.getDictionary() : [];
   List<Snippet> get snippets => _isInitialized ? _settings.getSnippets() : [];
+  
+  List<dynamic> get cloudCategories => _cloudCategories;
+  bool get isRegistryLoading => _isRegistryLoading;
+  String? get registryError => _registryError;
+  Map<String, String> get activeModels => _activeModels;
+  
+  // Helper to check if a specific model is downloaded
+  bool isModelDownloaded(String modelId) {
+    // Check locally by looking for the filename in the path
+    // For now, simpler check against modelManager's internal status
+    // (Improved in v0.2 to look at actual file presence)
+    return _modelStatuses[modelId] ?? false; 
+  }
 
   /// Initialize the app
   Future<void> initialize() async {
@@ -161,27 +182,59 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Download a model
-  Future<void> downloadModel(String modelKey) async {
+  /// Refresh cloud models from Drive
+  Future<void> refreshCloudModels({bool force = false}) async {
+    if (!force && _cloudCategories.isNotEmpty) return;
+    if (_isRegistryLoading) return;
+
+    _isRegistryLoading = true;
+    _registryError = null;
+    notifyListeners();
+
+    try {
+      final registry = await _modelManager.fetchCloudRegistry();
+      _cloudCategories = registry['categories'] as List;
+      _registryError = null;
+    } catch (e) {
+      _registryError = 'Failed to load models: $e';
+      debugPrint('AppProvider: Cloud refresh failed: $e');
+    } finally {
+      _isRegistryLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Clear the registry error
+  void clearRegistryError() {
+    _registryError = null;
+    notifyListeners();
+  }
+
+  /// Download a model with resume support
+  Future<void> downloadModel(
+    String modelId, {
+    String? driveId,
+    bool isZip = false,
+  }) async {
     _isDownloading = true;
-    _currentlyDownloading = modelKey;
-    _downloadProgress[modelKey] = 0.0;
+    _currentlyDownloading = modelId;
     notifyListeners();
 
     try {
       await _modelManager.downloadModel(
-        modelKey,
+        modelId,
+        driveId: driveId,
+        isZip: isZip,
         onProgress: (progress) {
-          _downloadProgress[modelKey] = progress;
+          _downloadProgress[modelId] = progress;
           notifyListeners();
         },
       );
-      _modelStatuses[modelKey] = true;
-
-      // Re-initialize pipeline after model download
-      await _pipeline.initialize();
+      
+      await refreshModelStatuses();
     } catch (e) {
       _errorMessage = 'Download failed: $e';
+      notifyListeners();
     } finally {
       _isDownloading = false;
       _currentlyDownloading = null;
@@ -190,12 +243,18 @@ class AppProvider extends ChangeNotifier {
   }
 
   /// Cancel model download
-  void cancelDownload(String modelKey) {
-    _modelManager.cancelDownload(modelKey);
+  void cancelDownload(String modelId) {
+    _modelManager.cancelDownload(modelId);
     _isDownloading = false;
     _currentlyDownloading = null;
-    _downloadProgress.remove(modelKey);
     notifyListeners();
+  }
+
+  /// Toggle active model in category
+  void useModel(String categoryId, String modelId) {
+    _activeModels[categoryId] = modelId;
+    notifyListeners();
+    // In a real app, we'd persist this and re-init services
   }
 
   // --- Settings mutations ---

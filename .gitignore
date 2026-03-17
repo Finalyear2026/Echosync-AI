@@ -54,10 +54,14 @@ app.*.map.json
 /android/app/release
 
 # Development temp files
+/*.txt
 *.resolved
 my_setup_info.txt
 transcription app_specification.txt
 changes_v_0_2_0.txt
+prompt.txt
+models.json
+
 
 # Flutter-specific
 .flutter-plugins
@@ -65,4 +69,7 @@ changes_v_0_2_0.txt
 .packages
 .dart_tool/
 build/
+
+# Model files
+/echosync_models/
 
