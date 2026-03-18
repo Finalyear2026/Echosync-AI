@@ -7,6 +7,7 @@ import '../models/transcription_result.dart';
 import '../services/pipeline_service.dart';
 import '../services/settings_service.dart';
 import '../services/model_manager_service.dart';
+import '../services/logging_service.dart';
 
 /// Main app state provider
 class AppProvider extends ChangeNotifier {
@@ -84,6 +85,7 @@ class AppProvider extends ChangeNotifier {
       if (!_settings.isInitialized) {
         await _settings.initialize();
       }
+      await LoggingService().init();
       await _modelManager.validateModelFiles();
       await _pipeline.initialize();
       await refreshModelStatuses();
@@ -113,6 +115,13 @@ class AppProvider extends ChangeNotifier {
     final statuses = await _modelManager.getModelStatuses(dynamicModels: dynamicMeta);
     _modelStatuses.clear();
     _modelStatuses.addAll(statuses);
+    
+    LoggingService().log(
+      'Model statuses refreshed',
+      category: 'MODELS',
+      details: {'count': statuses.length, 'downloaded_count': statuses.values.where((v) => v).length},
+    );
+    
     notifyListeners();
   }
 
@@ -207,9 +216,19 @@ class AppProvider extends ChangeNotifier {
     try {
       final registry = await _modelManager.fetchCloudRegistry();
       _cloudCategories = registry['categories'] ?? [];
+      LoggingService().log(
+        'Cloud models registry fetched successfully',
+        category: 'MODELS',
+        details: {'category_count': _cloudCategories.length},
+      );
       await refreshModelStatuses();
     } catch (e) {
       _registryError = 'Failed to load models: $e';
+      LoggingService().log(
+        'Cloud models registry fetch failed',
+        category: 'MODELS_ERROR',
+        details: {'error': e.toString()},
+      );
       debugPrint('AppProvider: Cloud refresh failed: $e');
     } finally {
       _isRegistryLoading = false;
@@ -236,6 +255,17 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      LoggingService().log(
+        'Starting model download',
+        category: 'MODELS',
+        details: {
+          'model_id': modelId,
+          'filename': filename,
+          'is_zip': isZip,
+          'expected_size': expectedSize,
+        },
+      );
+
       await _modelManager.downloadModel(
         modelId,
         driveId: driveId,
@@ -248,9 +278,20 @@ class AppProvider extends ChangeNotifier {
         },
       );
       
+      LoggingService().log(
+        'Model download completed successfully',
+        category: 'MODELS',
+        details: {'model_id': modelId},
+      );
+      
       await refreshModelStatuses();
     } catch (e) {
       _errorMessage = 'Download failed: $e';
+      LoggingService().log(
+        'Model download failed',
+        category: 'MODELS_ERROR',
+        details: {'model_id': modelId, 'error': e.toString()},
+      );
       notifyListeners();
     } finally {
       _isDownloading = false;
@@ -264,19 +305,49 @@ class AppProvider extends ChangeNotifier {
     _modelManager.cancelDownload(modelId);
     _isDownloading = false;
     _currentlyDownloading = null;
+    LoggingService().log(
+      'Model download cancelled by user',
+      category: 'MODELS',
+      details: {'model_id': modelId},
+    );
     notifyListeners();
   }
 
   /// Delete a downloaded model
   Future<void> deleteModel(String modelId, {String? filename, bool isZip = false}) async {
-    await _modelManager.deleteModel(modelId, filename: filename, isZip: isZip);
-    await refreshModelStatuses();
-    notifyListeners();
+    try {
+      LoggingService().log(
+        'Deleting model',
+        category: 'MODELS',
+        details: {'model_id': modelId, 'filename': filename, 'is_zip': isZip},
+      );
+      await _modelManager.deleteModel(modelId, filename: filename, isZip: isZip);
+      
+      LoggingService().log(
+        'Model deleted successfully',
+        category: 'MODELS',
+        details: {'model_id': modelId},
+      );
+      await refreshModelStatuses();
+      notifyListeners();
+    } catch (e) {
+      LoggingService().log(
+        'Model deletion failed',
+        category: 'MODELS_ERROR',
+        details: {'model_id': modelId, 'error': e.toString()},
+      );
+      rethrow;
+    }
   }
 
   /// Toggle active model in category
   void useModel(String categoryId, String modelId) {
     _activeModels[categoryId] = modelId;
+    LoggingService().log(
+      'Model selected for use',
+      category: 'MODELS',
+      details: {'category_id': categoryId, 'model_id': modelId},
+    );
     notifyListeners();
     // In a real app, we'd persist this and re-init services
   }

@@ -96,7 +96,7 @@ class ModelManagerService {
     return modelsPath;
   }
 
-  /// Check if a model file exists locally and is valid
+  /// Check if a model exists locally and is valid
   Future<bool> isModelDownloaded(String modelId, {int? expectedSize, String? filename, bool isZip = false}) async {
     final info = models[modelId];
     final actualFilename = filename ?? info?.filename;
@@ -107,33 +107,30 @@ class ModelManagerService {
     final modelsDirPath = await modelsDir;
     
     if (isZip) {
-      // For ZIPs, we check if the extracted directory exists
-      // Assuming directory name is the filename without .zip
-      final dirName = actualFilename.replaceAll('.zip', '');
-      final dir = Directory('$modelsDirPath/$dirName');
+      // Check for extracted directory (e.g. DeepFilterNet3)
+      final dirName = p.basenameWithoutExtension(actualFilename);
+      final dir = Directory(p.join(modelsDirPath, dirName));
       if (dir.existsSync()) return true;
       
-      // Also check if the ZIP itself still exists (maybe not extracted yet)
-      final zipFile = File('$modelsDirPath/$actualFilename');
+      // Also check for the ZIP file if not yet extracted
+      final zipFile = File(p.join(modelsDirPath, actualFilename));
       if (zipFile.existsSync()) {
         final size = await zipFile.length();
-        return size >= actualExpectedSize * 0.90; // Lower threshold for Zips
+        return size >= actualExpectedSize * 0.90;
       }
       return false;
     }
 
-    final path = '$modelsDirPath/$actualFilename';
+    final path = p.join(modelsDirPath, actualFilename);
     final file = File(path);
     if (!file.existsSync()) return false;
 
-    // Check size — must be at least 90% of expected size to be considered valid
-    // (Lowered from 95% because registry sizes can vary slightly)
+    // Check size (90% threshold for flexibility)
     final size = await file.length();
     final isValid = actualExpectedSize <= 0 || size >= actualExpectedSize * 0.90;
     
     if (!isValid) {
-      debugPrint('ModelManager: $modelId file found but INVALID size: '
-          '$size vs expected $actualExpectedSize');
+      debugPrint('ModelManager: $modelId found but INVALID size: $size vs $actualExpectedSize');
     }
     return isValid;
   }
@@ -142,13 +139,17 @@ class ModelManagerService {
   Future<void> validateModelFiles() async {
     for (final key in models.keys) {
       final info = models[key]!;
-      final path = '${await modelsDir}/${info.filename}';
+      final path = p.join(await modelsDir, info.filename);
       final file = File(path);
       if (file.existsSync()) {
         final size = await file.length();
         if (size < info.sizeBytes * 0.9) {
-          debugPrint('ModelManager: Deleting corrupted model: $key ($size bytes)');
-          await file.delete();
+          debugPrint('ModelManager: Deleting corrupted model: $key');
+          try {
+            await file.delete();
+          } catch (e) {
+            debugPrint('ModelManager: Error deleting $key: $e');
+          }
         }
       }
     }
@@ -158,7 +159,7 @@ class ModelManagerService {
   Future<String> getModelPath(String modelKey) async {
     final info = models[modelKey];
     if (info == null) throw ArgumentError('Unknown model: $modelKey');
-    return '${await modelsDir}/${info.filename}';
+    return p.join(await modelsDir, info.filename);
   }
 
   /// Get download progress for a model (0.0 to 1.0)
@@ -177,9 +178,8 @@ class ModelManagerService {
     final actualFilename = filename ?? info?.filename ?? (isZip ? '$modelKey.zip' : '$modelKey.bin');
     final actualExpectedSize = expectedSize ?? info?.sizeBytes ?? 0;
 
-
     final modelsDirPath = await modelsDir;
-    final filePath = '$modelsDirPath/$filename';
+    final filePath = p.join(modelsDirPath, actualFilename);
     final file = File(filePath);
     final tempPath = '$filePath.part';
     final tempFile = File(tempPath);
@@ -192,7 +192,6 @@ class ModelManagerService {
         onProgress?.call(1.0);
         return filePath;
       }
-      // If file exists but is too small, delete it and use temp logic
       await file.delete();
     }
 
@@ -222,7 +221,7 @@ class ModelManagerService {
           receiveTimeout: const Duration(hours: 2),
           responseType: ResponseType.stream,
         ),
-        deleteOnError: false, // Keep partial file for resume
+        deleteOnError: false, 
       );
 
       // 3. Finalize file
@@ -255,11 +254,11 @@ class ModelManagerService {
       final filename = file.name;
       if (file.isFile) {
         final data = file.content as List<int>;
-        File('$targetDir/$filename')
+        File(p.join(targetDir, filename))
           ..createSync(recursive: true)
           ..writeAsBytesSync(data);
       } else {
-        Directory('$targetDir/$filename').createSync(recursive: true);
+        Directory(p.join(targetDir, filename)).createSync(recursive: true);
       }
     }
     // Delete zip after extraction to save space
@@ -281,31 +280,36 @@ class ModelManagerService {
     
     final modelsDirPath = await modelsDir;
     
-    if (isZip) {
-      final dirName = actualFilename.replaceAll('.zip', '');
-      final dir = Directory('$modelsDirPath/$dirName');
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-        debugPrint('ModelManager: Deleted directory $dirName');
+    try {
+      if (isZip) {
+        final dirName = p.basenameWithoutExtension(actualFilename);
+        final dir = Directory(p.join(modelsDirPath, dirName));
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+          debugPrint('ModelManager: Deleted directory $dirName');
+        }
+        
+        // Also delete the ZIP if it exists
+        final zipFile = File(p.join(modelsDirPath, actualFilename));
+        if (await zipFile.exists()) {
+          await zipFile.delete();
+        }
+      } else {
+        final path = p.join(modelsDirPath, actualFilename);
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+          debugPrint('ModelManager: Deleted file $actualFilename');
+        }
       }
-      
-      // Also delete the ZIP if it exists
-      final zipFile = File('$modelsDirPath/$actualFilename');
-      if (await zipFile.exists()) {
-        await zipFile.delete();
-      }
-    } else {
-      final path = '$modelsDirPath/$actualFilename';
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-        debugPrint('ModelManager: Deleted file $actualFilename');
-      }
+    } catch (e) {
+      debugPrint('ModelManager: ERROR during deletion: $e');
+      // If we get an error, it's often due to a file lock on Android/MTP
+      throw Exception('Could not delete model. It might be in use by the app or Windows File Explorer. Try restarting the app.');
     }
     
     _downloadProgress.remove(modelId);
   }
-
   /// Get status of all models
   /// Can take map of dynamic models to check: {modelId: {'filename': '...', 'sizeBytes': ...}}
   Future<Map<String, bool>> getModelStatuses({Map<String, dynamic>? dynamicModels}) async {

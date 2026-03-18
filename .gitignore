@@ -74,3 +74,4 @@ build/
 /echosync_models/
 
 /scrcpy-win64-v3.3.4*
+/afm_cache/

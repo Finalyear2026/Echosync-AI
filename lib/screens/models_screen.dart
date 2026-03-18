@@ -5,6 +5,7 @@ import '../providers/app_provider.dart';
 import '../services/connectivity_service.dart';
 import '../widgets/model_download_card.dart';
 import '../theme/app_theme.dart';
+import '../services/logging_service.dart';
 
 class ModelsScreen extends StatefulWidget {
   const ModelsScreen({super.key});
@@ -24,10 +25,20 @@ class _ModelsScreenState extends State<ModelsScreen> {
     _checkInitialConnection();
     _connectivitySub = _connectivity.onConnectivityChanged.listen((connected) {
       setState(() => _isOnline = connected);
+      LoggingService().log(
+        'Connectivity status changed on ModelsScreen',
+        category: 'SCREEN_MODELS',
+        details: {'is_online': connected},
+      );
       if (connected) {
         context.read<AppProvider>().refreshCloudModels();
       }
     });
+
+    LoggingService().log(
+      'Entered ModelsScreen',
+      category: 'SCREEN_MODELS',
+    );
   }
 
   Future<void> _checkInitialConnection() async {
@@ -42,6 +53,10 @@ class _ModelsScreenState extends State<ModelsScreen> {
 
   @override
   void dispose() {
+    LoggingService().log(
+      'Leaving ModelsScreen',
+      category: 'SCREEN_MODELS',
+    );
     _connectivitySub?.cancel();
     super.dispose();
   }
