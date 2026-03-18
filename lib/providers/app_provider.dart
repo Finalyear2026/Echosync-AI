@@ -97,7 +97,19 @@ class AppProvider extends ChangeNotifier {
 
   /// Refresh model download statuses
   Future<void> refreshModelStatuses() async {
-    final statuses = await _modelManager.getModelStatuses();
+    // Collect metadata for cloud models to check their file presence
+    final Map<String, dynamic> dynamicMeta = {};
+    for (final category in _cloudCategories) {
+      final models = category['models'] as List;
+      for (final m in models) {
+        dynamicMeta[m['id']] = {
+          'filename': m['filename'],
+          'size_bytes': m['size_bytes'],
+        };
+      }
+    }
+
+    final statuses = await _modelManager.getModelStatuses(dynamicModels: dynamicMeta);
     _modelStatuses.clear();
     _modelStatuses.addAll(statuses);
     notifyListeners();
@@ -215,6 +227,8 @@ class AppProvider extends ChangeNotifier {
     String modelId, {
     String? driveId,
     bool isZip = false,
+    int? expectedSize,
+    String? filename,
   }) async {
     _isDownloading = true;
     _currentlyDownloading = modelId;
@@ -225,6 +239,8 @@ class AppProvider extends ChangeNotifier {
         modelId,
         driveId: driveId,
         isZip: isZip,
+        expectedSize: expectedSize,
+        filename: filename,
         onProgress: (progress) {
           _downloadProgress[modelId] = progress;
           notifyListeners();

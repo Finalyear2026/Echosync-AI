@@ -31,7 +31,11 @@ class AudioRecorderService {
       throw StateError('Already recording');
     }
 
-    final dir = await getApplicationDocumentsDirectory();
+    // Use External Storage for visibility in Windows File Explorer
+    final extDir = await getExternalStorageDirectory();
+    final internalDir = await getApplicationDocumentsDirectory();
+    final dir = extDir ?? internalDir;
+    
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     _currentRecordingPath = '${dir.path}/recording_$timestamp.wav';
 

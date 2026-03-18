@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
 
 import 'models/dictionary_entry.dart';
 import 'models/snippet.dart';
@@ -28,8 +30,12 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  // Initialize Hive
-  await Hive.initFlutter();
+  // Initialize Hive in External Storage for visibility
+  final extDir = await getExternalStorageDirectory();
+  final internalDir = await getApplicationDocumentsDirectory();
+  final hivePath = (extDir ?? internalDir).path;
+  
+  Hive.init(hivePath);
   Hive.registerAdapter(DictionaryEntryAdapter());
   Hive.registerAdapter(SnippetAdapter());
 

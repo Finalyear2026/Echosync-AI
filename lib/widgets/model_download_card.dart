@@ -10,6 +10,7 @@ class ModelDownloadCard extends StatelessWidget {
   final int sizeBytes;
   final String driveId;
   final bool isZip;
+  final String filename;
 
   const ModelDownloadCard({
     super.key,
@@ -19,6 +20,7 @@ class ModelDownloadCard extends StatelessWidget {
     required this.sizeBytes,
     required this.driveId,
     required this.isZip,
+    required this.filename,
   });
 
   @override
@@ -125,7 +127,13 @@ class ModelDownloadCard extends StatelessWidget {
     }
 
     return ElevatedButton(
-      onPressed: () => provider.downloadModel(modelId, driveId: driveId, isZip: isZip),
+      onPressed: () => provider.downloadModel(
+        modelId, 
+        driveId: driveId, 
+        isZip: isZip,
+        expectedSize: sizeBytes,
+        filename: filename,
+      ),
       style: ElevatedButton.styleFrom(
         backgroundColor: AppTheme.primaryPurple,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

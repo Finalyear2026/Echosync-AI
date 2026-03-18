@@ -165,6 +165,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
                     sizeBytes: model['size_bytes'],
                     driveId: model['drive_id'],
                     isZip: model['is_zip'] ?? false,
+                    filename: model['filename'],
                   )),
                 ],
               );

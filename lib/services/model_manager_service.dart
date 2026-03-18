@@ -86,26 +86,35 @@ class ModelManagerService {
 
   /// Get the model storage directory
   Future<String> get modelsDir async {
-    final dir = await getApplicationDocumentsDirectory();
+    // We use getExternalStorageDirectory so files are visible via PC (MTP)
+    // On Android: Android/data/com.echosync.echosync_ai/files/models/
+    var dir = await getExternalStorageDirectory();
+    dir ??= await getApplicationDocumentsDirectory(); // Fallback to internal if needed
+    
     final modelsPath = '${dir.path}/models';
     await Directory(modelsPath).create(recursive: true);
     return modelsPath;
   }
 
   /// Check if a model file exists locally and is valid (correct size)
-  Future<bool> isModelDownloaded(String modelKey) async {
-    final info = models[modelKey];
-    if (info == null) return false;
-    final path = '${await modelsDir}/${info.filename}';
+  Future<bool> isModelDownloaded(String modelId, {int? expectedSize, String? filename}) async {
+    final info = models[modelId];
+    final actualFilename = filename ?? info?.filename;
+    final actualExpectedSize = expectedSize ?? info?.sizeBytes ?? 0;
+
+    if (actualFilename == null || actualExpectedSize <= 0) return false;
+    
+    final path = '${await modelsDir}/$actualFilename';
     final file = File(path);
     if (!file.existsSync()) return false;
 
     // Check size — must be at least 95% of expected size to be considered valid
     final size = await file.length();
-    final isValid = size >= info.sizeBytes * 0.95;
+    final isValid = size >= actualExpectedSize * 0.95;
+    
     if (!isValid) {
-      debugPrint('ModelManager: $modelKey file found but INVALID size: '
-          '$size vs expected ${info.sizeBytes}');
+      debugPrint('ModelManager: $modelId file found but INVALID size: '
+          '$size vs expected $actualExpectedSize');
     }
     return isValid;
   }
@@ -141,11 +150,14 @@ class ModelManagerService {
     String modelKey, {
     String? driveId,
     bool isZip = false,
+    int? expectedSize,
+    String? filename,
     ValueChanged<double>? onProgress,
   }) async {
     final info = models[modelKey];
-    final filename = info?.filename ?? (isZip ? '$modelKey.zip' : '$modelKey.bin');
-    final expectedSize = info?.sizeBytes ?? 0;
+    final actualFilename = filename ?? info?.filename ?? (isZip ? '$modelKey.zip' : '$modelKey.bin');
+    final actualExpectedSize = expectedSize ?? info?.sizeBytes ?? 0;
+
 
     final modelsDirPath = await modelsDir;
     final filePath = '$modelsDirPath/$filename';
@@ -154,9 +166,9 @@ class ModelManagerService {
     final tempFile = File(tempPath);
 
     // 1. Check if already downloaded and valid
-    if (file.existsSync()) {
+    if (actualExpectedSize > 0 && file.existsSync()) {
       final size = await file.length();
-      if (size >= expectedSize * 0.95) {
+      if (size >= actualExpectedSize * 0.95) {
         _downloadProgress[modelKey] = 1.0;
         onProgress?.call(1.0);
         return filePath;
@@ -256,10 +268,26 @@ class ModelManagerService {
   }
 
   /// Get status of all models
-  Future<Map<String, bool>> getModelStatuses() async {
+  /// Can take map of dynamic models to check: {modelId: {'filename': '...', 'sizeBytes': ...}}
+  Future<Map<String, bool>> getModelStatuses({Map<String, dynamic>? dynamicModels}) async {
     final statuses = <String, bool>{};
+    
+    // Check static models
     for (final key in models.keys) {
       statuses[key] = await isModelDownloaded(key);
+    }
+    
+    // Check dynamic models
+    if (dynamicModels != null) {
+      for (final entry in dynamicModels.entries) {
+        final id = entry.key;
+        final meta = entry.value as Map<String, dynamic>;
+        statuses[id] = await isModelDownloaded(
+          id, 
+          filename: meta['filename'], 
+          expectedSize: meta['size_bytes'],
+        );
+      }
     }
     return statuses;
   }
