@@ -103,7 +103,7 @@ class ModelDownloadCard extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            onPressed: () {}, // Delete logic TBD
+            onPressed: () => provider.deleteModel(modelId, filename: filename, isZip: isZip),
             icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
           ),
         ],

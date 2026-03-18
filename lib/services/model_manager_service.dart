@@ -96,21 +96,40 @@ class ModelManagerService {
     return modelsPath;
   }
 
-  /// Check if a model file exists locally and is valid (correct size)
-  Future<bool> isModelDownloaded(String modelId, {int? expectedSize, String? filename}) async {
+  /// Check if a model file exists locally and is valid
+  Future<bool> isModelDownloaded(String modelId, {int? expectedSize, String? filename, bool isZip = false}) async {
     final info = models[modelId];
     final actualFilename = filename ?? info?.filename;
     final actualExpectedSize = expectedSize ?? info?.sizeBytes ?? 0;
 
-    if (actualFilename == null || actualExpectedSize <= 0) return false;
+    if (actualFilename == null) return false;
     
-    final path = '${await modelsDir}/$actualFilename';
+    final modelsDirPath = await modelsDir;
+    
+    if (isZip) {
+      // For ZIPs, we check if the extracted directory exists
+      // Assuming directory name is the filename without .zip
+      final dirName = actualFilename.replaceAll('.zip', '');
+      final dir = Directory('$modelsDirPath/$dirName');
+      if (dir.existsSync()) return true;
+      
+      // Also check if the ZIP itself still exists (maybe not extracted yet)
+      final zipFile = File('$modelsDirPath/$actualFilename');
+      if (zipFile.existsSync()) {
+        final size = await zipFile.length();
+        return size >= actualExpectedSize * 0.90; // Lower threshold for Zips
+      }
+      return false;
+    }
+
+    final path = '$modelsDirPath/$actualFilename';
     final file = File(path);
     if (!file.existsSync()) return false;
 
-    // Check size — must be at least 95% of expected size to be considered valid
+    // Check size — must be at least 90% of expected size to be considered valid
+    // (Lowered from 95% because registry sizes can vary slightly)
     final size = await file.length();
-    final isValid = size >= actualExpectedSize * 0.95;
+    final isValid = actualExpectedSize <= 0 || size >= actualExpectedSize * 0.90;
     
     if (!isValid) {
       debugPrint('ModelManager: $modelId file found but INVALID size: '
@@ -255,16 +274,36 @@ class ModelManagerService {
   }
 
   /// Delete a downloaded model
-  Future<void> deleteModel(String modelKey) async {
-    final info = models[modelKey];
-    if (info == null) return;
-    final path = '${await modelsDir}/${info.filename}';
-    final file = File(path);
-    if (await file.exists()) {
-      await file.delete();
-      _downloadProgress.remove(modelKey);
-      debugPrint('ModelManager: Deleted $modelKey from $path');
+  Future<void> deleteModel(String modelId, {String? filename, bool isZip = false}) async {
+    final info = models[modelId];
+    final actualFilename = filename ?? info?.filename;
+    if (actualFilename == null) return;
+    
+    final modelsDirPath = await modelsDir;
+    
+    if (isZip) {
+      final dirName = actualFilename.replaceAll('.zip', '');
+      final dir = Directory('$modelsDirPath/$dirName');
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+        debugPrint('ModelManager: Deleted directory $dirName');
+      }
+      
+      // Also delete the ZIP if it exists
+      final zipFile = File('$modelsDirPath/$actualFilename');
+      if (await zipFile.exists()) {
+        await zipFile.delete();
+      }
+    } else {
+      final path = '$modelsDirPath/$actualFilename';
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint('ModelManager: Deleted file $actualFilename');
+      }
     }
+    
+    _downloadProgress.remove(modelId);
   }
 
   /// Get status of all models
@@ -286,6 +325,7 @@ class ModelManagerService {
           id, 
           filename: meta['filename'], 
           expectedSize: meta['size_bytes'],
+          isZip: meta['is_zip'] ?? false,
         );
       }
     }

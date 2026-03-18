@@ -105,6 +105,7 @@ class AppProvider extends ChangeNotifier {
         dynamicMeta[m['id']] = {
           'filename': m['filename'],
           'size_bytes': m['size_bytes'],
+          'is_zip': m['is_zip'] ?? false,
         };
       }
     }
@@ -205,8 +206,8 @@ class AppProvider extends ChangeNotifier {
 
     try {
       final registry = await _modelManager.fetchCloudRegistry();
-      _cloudCategories = registry['categories'] as List;
-      _registryError = null;
+      _cloudCategories = registry['categories'] ?? [];
+      await refreshModelStatuses();
     } catch (e) {
       _registryError = 'Failed to load models: $e';
       debugPrint('AppProvider: Cloud refresh failed: $e');
@@ -263,6 +264,13 @@ class AppProvider extends ChangeNotifier {
     _modelManager.cancelDownload(modelId);
     _isDownloading = false;
     _currentlyDownloading = null;
+    notifyListeners();
+  }
+
+  /// Delete a downloaded model
+  Future<void> deleteModel(String modelId, {String? filename, bool isZip = false}) async {
+    await _modelManager.deleteModel(modelId, filename: filename, isZip: isZip);
+    await refreshModelStatuses();
     notifyListeners();
   }
 
