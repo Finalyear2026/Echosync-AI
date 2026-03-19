@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
+import 'logging_service.dart';
 
 /// Manages downloading and storage of AI model files.
 /// Supports resumable downloads with progress tracking.
@@ -106,33 +107,43 @@ class ModelManagerService {
     
     final modelsDirPath = await modelsDir;
     
-    if (isZip) {
-      // Check for extracted directory (e.g. DeepFilterNet3)
-      final dirName = p.basenameWithoutExtension(actualFilename);
-      final dir = Directory(p.join(modelsDirPath, dirName));
-      if (dir.existsSync()) return true;
+    LoggingService().log(
+      'Checking model presence',
+      category: 'MODELS_DEBUG',
+      details: {
+        'modelId': modelId,
+        'isZip': isZip,
+        'filename': actualFilename,
+        'expectedSize': actualExpectedSize,
+        'dirPath': modelsDirPath,
+      },
+    );
+
+    // 1. Check for extracted directory (always check this first for robustness)
+    final dirName = p.basenameWithoutExtension(actualFilename);
+    final dir = Directory(p.join(modelsDirPath, dirName));
+    if (dir.existsSync()) {
+      LoggingService().log('Found extracted directory', category: 'MODELS_DEBUG', details: {'path': dir.path});
+      return true;
+    }
+
+    // 2. Check for the file itself (either the model bin or the zip file)
+    final file = File(p.join(modelsDirPath, actualFilename));
+    if (file.existsSync()) {
+      final size = await file.length();
+      // Use a more relaxed size check for partial/compressed files (90% threshold)
+      final isValid = actualExpectedSize <= 0 || size >= actualExpectedSize * 0.90;
       
-      // Also check for the ZIP file if not yet extracted
-      final zipFile = File(p.join(modelsDirPath, actualFilename));
-      if (zipFile.existsSync()) {
-        final size = await zipFile.length();
-        return size >= actualExpectedSize * 0.90;
-      }
-      return false;
+      LoggingService().log(
+        'Found file',
+        category: 'MODELS_DEBUG',
+        details: {'path': file.path, 'size': size, 'isValid': isValid},
+      );
+      return isValid;
     }
 
-    final path = p.join(modelsDirPath, actualFilename);
-    final file = File(path);
-    if (!file.existsSync()) return false;
-
-    // Check size (90% threshold for flexibility)
-    final size = await file.length();
-    final isValid = actualExpectedSize <= 0 || size >= actualExpectedSize * 0.90;
-    
-    if (!isValid) {
-      debugPrint('ModelManager: $modelId found but INVALID size: $size vs $actualExpectedSize');
-    }
-    return isValid;
+    LoggingService().log('No model folder or file found', category: 'MODELS_DEBUG', details: {'modelId': modelId});
+    return false;
   }
 
   /// Delete corrupted or incomplete model files
@@ -185,19 +196,15 @@ class ModelManagerService {
     final tempFile = File(tempPath);
 
     // 1. Check if already downloaded and valid
-    if (actualExpectedSize > 0 && file.existsSync()) {
-      final size = await file.length();
-      if (size >= actualExpectedSize * 0.95) {
-        _downloadProgress[modelKey] = 1.0;
-        onProgress?.call(DownloadProgressInfo(
-          progress: 1.0,
-          downloadedBytes: size,
-          totalBytes: size,
-          speedBytesPerSecond: 0,
-        ));
-        return filePath;
-      }
-      await file.delete();
+    if (await isModelDownloaded(modelKey, expectedSize: actualExpectedSize, filename: actualFilename, isZip: isZip)) {
+      _downloadProgress[modelKey] = 1.0;
+      onProgress?.call(DownloadProgressInfo(
+        progress: 1.0,
+        downloadedBytes: actualExpectedSize,
+        totalBytes: actualExpectedSize,
+        speedBytesPerSecond: 0,
+      ));
+      return filePath;
     }
 
     // 2. Resume logic
@@ -342,6 +349,7 @@ class ModelManagerService {
     
     _downloadProgress.remove(modelId);
   }
+
   /// Get status of all models
   /// Can take map of dynamic models to check: {modelId: {'filename': '...', 'sizeBytes': ...}}
   Future<Map<String, bool>> getModelStatuses({Map<String, dynamic>? dynamicModels}) async {
