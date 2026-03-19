@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'logging_service.dart';
 
@@ -245,39 +245,69 @@ class ModelManagerService {
     final url = driveId != null ? _getDriveDownloadUrl(driveId) : (info?.url ?? '');
 
     try {
-      await _dio.download(
+    final raf = await tempFile.open(mode: FileMode.append);
+    try {
+      final response = await _dio.get<ResponseBody>(
         url,
-        tempPath,
         cancelToken: cancelToken,
-        onReceiveProgress: (received, total) {
-          final now = DateTime.now();
-          final duration = now.difference(lastTime).inMilliseconds;
-          
-          if (duration > 500) { // Update speed every 500ms for stability
-            currentSpeed = (received - lastReceived) / (duration / 1000.0);
-            lastReceived = received;
-            lastTime = now;
-          }
-
-          final totalWithExisting = existingLength + total;
-          final receivedWithExisting = existingLength + received;
-          final progress = receivedWithExisting / totalWithExisting;
-          
-          _downloadProgress[modelKey] = progress;
-          onProgress?.call(DownloadProgressInfo(
-            progress: progress,
-            downloadedBytes: receivedWithExisting,
-            totalBytes: totalWithExisting,
-            speedBytesPerSecond: currentSpeed,
-          ));
-        },
         options: Options(
           headers: existingLength > 0 ? {'range': 'bytes=$existingLength-'} : null,
           receiveTimeout: const Duration(hours: 2),
           responseType: ResponseType.stream,
+          followRedirects: true,
+          validateStatus: (status) => status != null && status < 500,
         ),
-        deleteOnError: false, 
       );
+
+      // Handle server responding with full content (200) instead of partial (206)
+      // This happens if the server doesn't support the range header
+      int currentExistingLength = existingLength;
+      if (response.statusCode == 200) {
+        currentExistingLength = 0;
+        await raf.setPosition(0);
+        await raf.truncate(0);
+      } else if (response.statusCode != 206 && existingLength > 0) {
+        // Some other status - if we expected partial but didn't get it, reset to be safe
+        currentExistingLength = 0;
+        await raf.setPosition(0);
+        await raf.truncate(0);
+      }
+
+      final stream = response.data!.stream;
+      int received = 0;
+      final total = int.tryParse(response.headers.value('content-length') ?? '-1') ?? -1;
+
+      await for (final chunk in stream) {
+        if (cancelToken.isCancelled) {
+          throw DioException(requestOptions: response.requestOptions, type: DioExceptionType.cancel);
+        }
+
+        await raf.writeFrom(chunk);
+        received += chunk.length;
+
+        final now = DateTime.now();
+        final duration = now.difference(lastTime).inMilliseconds;
+        if (duration > 500) {
+          currentSpeed = (received - lastReceived) / (duration / 1000.0);
+          lastReceived = received;
+          lastTime = now;
+        }
+
+        final absoluteReceived = currentExistingLength + received;
+        final absoluteTotal = total > 0 ? (currentExistingLength + total) : (actualExpectedSize > 0 ? actualExpectedSize : -1);
+        final progress = absoluteTotal > 0 ? (absoluteReceived / absoluteTotal) : 0.0;
+
+        _downloadProgress[modelKey] = progress;
+        onProgress?.call(DownloadProgressInfo(
+          progress: progress,
+          downloadedBytes: absoluteReceived,
+          totalBytes: absoluteTotal > 0 ? absoluteTotal : absoluteReceived,
+          speedBytesPerSecond: currentSpeed,
+        ));
+      }
+    } finally {
+      await raf.close();
+    }
 
       // 3. Finalize file
       await tempFile.rename(filePath);
@@ -315,15 +345,17 @@ class ModelManagerService {
     }
   }
 
-  /// Extract zip file to directory
+  /// Extract zip file to directory with optimal memory usage (uses streaming)
   Future<void> _extractZip(String zipPath, String modelsDirPath) async {
-    final bytes = await File(zipPath).readAsBytes();
-    final archive = ZipDecoder().decodeBytes(bytes);
+    // We use InputFileStream for large model files to avoid reading everything into memory (OOM)
+    final inputStream = InputFileStream(zipPath);
+    final archive = ZipDecoder().decodeBuffer(inputStream);
     
     for (final file in archive) {
       final filename = file.name;
       if (file.isFile) {
         final data = file.content as List<int>;
+        // Extract directly into the models directory (Extract Here)
         File(p.join(modelsDirPath, filename))
           ..createSync(recursive: true)
           ..writeAsBytesSync(data);
@@ -331,9 +363,14 @@ class ModelManagerService {
         Directory(p.join(modelsDirPath, filename)).createSync(recursive: true);
       }
     }
+    
+    // Explicitly close the stream before attempting to delete
+    await inputStream.close();
+    
     // Delete zip after extraction to save space
-    if (await File(zipPath).exists()) {
-      await File(zipPath).delete();
+    final zipFile = File(zipPath);
+    if (await zipFile.exists()) {
+      await zipFile.delete();
     }
   }
 
