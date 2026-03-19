@@ -211,6 +211,7 @@ class ModelManagerService {
     
     final startTime = DateTime.now();
     int lastReceived = 0;
+    double currentSpeed = 0;
     DateTime lastTime = startTime;
     final url = driveId != null ? _getDriveDownloadUrl(driveId) : (info?.url ?? '');
 
@@ -223,9 +224,8 @@ class ModelManagerService {
           final now = DateTime.now();
           final duration = now.difference(lastTime).inMilliseconds;
           
-          double speed = 0;
           if (duration > 500) { // Update speed every 500ms for stability
-            speed = (received - lastReceived) / (duration / 1000.0);
+            currentSpeed = (received - lastReceived) / (duration / 1000.0);
             lastReceived = received;
             lastTime = now;
           }
@@ -239,7 +239,7 @@ class ModelManagerService {
             progress: progress,
             downloadedBytes: receivedWithExisting,
             totalBytes: totalWithExisting,
-            speedBytesPerSecond: speed,
+            speedBytesPerSecond: currentSpeed,
           ));
         },
         options: Options(
