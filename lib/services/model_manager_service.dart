@@ -172,7 +172,7 @@ class ModelManagerService {
     bool isZip = false,
     int? expectedSize,
     String? filename,
-    ValueChanged<double>? onProgress,
+    ValueChanged<DownloadProgressInfo>? onProgress,
   }) async {
     final info = models[modelKey];
     final actualFilename = filename ?? info?.filename ?? (isZip ? '$modelKey.zip' : '$modelKey.bin');
@@ -189,7 +189,12 @@ class ModelManagerService {
       final size = await file.length();
       if (size >= actualExpectedSize * 0.95) {
         _downloadProgress[modelKey] = 1.0;
-        onProgress?.call(1.0);
+        onProgress?.call(DownloadProgressInfo(
+          progress: 1.0,
+          downloadedBytes: size,
+          totalBytes: size,
+          speedBytesPerSecond: 0,
+        ));
         return filePath;
       }
       await file.delete();
@@ -204,6 +209,9 @@ class ModelManagerService {
     final cancelToken = CancelToken();
     _cancelTokens[modelKey] = cancelToken;
     
+    final startTime = DateTime.now();
+    int lastReceived = 0;
+    DateTime lastTime = startTime;
     final url = driveId != null ? _getDriveDownloadUrl(driveId) : (info?.url ?? '');
 
     try {
@@ -212,9 +220,27 @@ class ModelManagerService {
         tempPath,
         cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
-          final progress = (existingLength + received) / (existingLength + total);
+          final now = DateTime.now();
+          final duration = now.difference(lastTime).inMilliseconds;
+          
+          double speed = 0;
+          if (duration > 500) { // Update speed every 500ms for stability
+            speed = (received - lastReceived) / (duration / 1000.0);
+            lastReceived = received;
+            lastTime = now;
+          }
+
+          final totalWithExisting = existingLength + total;
+          final receivedWithExisting = existingLength + received;
+          final progress = receivedWithExisting / totalWithExisting;
+          
           _downloadProgress[modelKey] = progress;
-          onProgress?.call(progress);
+          onProgress?.call(DownloadProgressInfo(
+            progress: progress,
+            downloadedBytes: receivedWithExisting,
+            totalBytes: totalWithExisting,
+            speedBytesPerSecond: speed,
+          ));
         },
         options: Options(
           headers: existingLength > 0 ? {'range': 'bytes=$existingLength-'} : null,
@@ -233,7 +259,13 @@ class ModelManagerService {
       }
 
       _downloadProgress[modelKey] = 1.0;
-      onProgress?.call(1.0);
+      final finalSize = await File(filePath).length();
+      onProgress?.call(DownloadProgressInfo(
+        progress: 1.0,
+        downloadedBytes: finalSize,
+        totalBytes: finalSize,
+        speedBytesPerSecond: 0,
+      ));
       return filePath;
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
@@ -362,4 +394,33 @@ class ModelInfo {
   });
 
   String get sizeMB => '${(sizeBytes / 1000000).round()} MB';
+}
+
+/// Detailed progress information for model downloads
+class DownloadProgressInfo {
+  final double progress; // 0.0 to 1.0
+  final int downloadedBytes;
+  final int totalBytes;
+  final double speedBytesPerSecond;
+
+  DownloadProgressInfo({
+    required this.progress,
+    required this.downloadedBytes,
+    required this.totalBytes,
+    required this.speedBytesPerSecond,
+  });
+
+  String get downloadedMB => (downloadedBytes / (1024 * 1024)).toStringAsFixed(1);
+  String get totalMB => (totalBytes / (1024 * 1024)).toStringAsFixed(1);
+  
+  String get speedText {
+    if (speedBytesPerSecond <= 0) return '0 KB/s';
+    if (speedBytesPerSecond > 1024 * 1024) {
+      return '${(speedBytesPerSecond / (1024 * 1024)).toStringAsFixed(1)} MB/s';
+    } else {
+      return '${(speedBytesPerSecond / 1024).toStringAsFixed(1)} KB/s';
+    }
+  }
+
+  String get percentageText => '${(progress * 100).toStringAsFixed(1)}%';
 }

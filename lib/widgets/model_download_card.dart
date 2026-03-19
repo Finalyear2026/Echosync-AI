@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_theme.dart';
+import '../services/model_manager_service.dart';
 
 class ModelDownloadCard extends StatelessWidget {
   final String modelId;
@@ -28,7 +29,7 @@ class ModelDownloadCard extends StatelessWidget {
     return Consumer<AppProvider>(
       builder: (context, provider, child) {
         final isDownloaded = provider.isModelDownloaded(modelId);
-        final downloadProgress = provider.downloadProgress[modelId] ?? 0.0;
+        final downloadInfo = provider.downloadProgress[modelId];
         final isDownloading = provider.currentlyDownloading == modelId;
         final sizeMB = (sizeBytes / (1024 * 1024)).toStringAsFixed(1);
 
@@ -52,10 +53,10 @@ class ModelDownloadCard extends StatelessWidget {
                   _buildIcon(isDownloaded),
                   const SizedBox(width: 12),
                   _buildDetails(sizeMB),
-                  _buildActions(context, provider, isDownloaded, isDownloading, downloadProgress),
+                  _buildActions(context, provider, isDownloaded, isDownloading),
                 ],
               ),
-              if (isDownloading) _buildProgress(downloadProgress),
+              if (isDownloading) _buildProgress(downloadInfo),
             ],
           ),
         );
@@ -92,7 +93,7 @@ class ModelDownloadCard extends StatelessWidget {
     );
   }
 
-  Widget _buildActions(BuildContext context, AppProvider provider, bool isDownloaded, bool isDownloading, double progress) {
+  Widget _buildActions(BuildContext context, AppProvider provider, bool isDownloaded, bool isDownloading) {
     if (isDownloaded) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -143,24 +144,43 @@ class ModelDownloadCard extends StatelessWidget {
     );
   }
 
-  Widget _buildProgress(double progress) {
+  Widget _buildProgress(DownloadProgressInfo? info) {
+    if (info == null) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 12.0),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+    
     return Column(
       children: [
         const SizedBox(height: 12),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: progress,
+            value: info.progress,
             backgroundColor: Colors.white.withOpacity(0.06),
             valueColor: const AlwaysStoppedAnimation(AppTheme.accentCyan),
             minHeight: 4,
           ),
         ),
-        const SizedBox(height: 4),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Text('${(progress * 100).toStringAsFixed(1)}%', 
-            style: const TextStyle(color: AppTheme.textMuted, fontSize: 10)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+             Text(
+              '${info.downloadedMB}MB / ${info.totalMB}MB',
+              style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
+            ),
+             Text(
+              info.speedText,
+              style: const TextStyle(color: AppTheme.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              info.percentageText,
+              style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
+            ),
+          ],
         ),
       ],
     );

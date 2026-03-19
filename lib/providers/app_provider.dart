@@ -26,7 +26,7 @@ class AppProvider extends ChangeNotifier {
   List<dynamic> _cloudCategories = [];
   bool _isDownloading = false;
   String? _currentlyDownloading;
-  final Map<String, double> _downloadProgress = {};
+  final Map<String, DownloadProgressInfo> _downloadProgress = {};
   
   // Registry state
   bool _isRegistryLoading = false;
@@ -54,7 +54,7 @@ class AppProvider extends ChangeNotifier {
       _stage == ProcessingStage.transcribing ||
       _stage == ProcessingStage.formatting;
   Duration get recordingDuration => _recordingDuration;
-  Map<String, double> get downloadProgress => _downloadProgress;
+  Map<String, DownloadProgressInfo> get downloadProgress => _downloadProgress;
   Map<String, bool> get modelStatuses => _modelStatuses;
   bool get isDownloading => _isDownloading;
   String? get currentlyDownloading => _currentlyDownloading;
@@ -272,8 +272,8 @@ class AppProvider extends ChangeNotifier {
         isZip: isZip,
         expectedSize: expectedSize,
         filename: filename,
-        onProgress: (progress) {
-          _downloadProgress[modelId] = progress;
+        onProgress: (progressInfo) {
+          _downloadProgress[modelId] = progressInfo;
           notifyListeners();
         },
       );
