@@ -57,7 +57,8 @@ class ModelDownloadCard extends StatelessWidget {
                   _buildActions(context, provider, isDownloaded, isDownloading, isPaused),
                 ],
               ),
-              if (isDownloading || isPaused) _buildProgress(downloadInfo),
+              if (isDownloading || isPaused) _buildProgress(downloadInfo, isPaused: isPaused),
+
             ],
           ),
         );
@@ -169,7 +170,8 @@ class ModelDownloadCard extends StatelessWidget {
     );
   }
 
-  Widget _buildProgress(DownloadProgressInfo? info) {
+  Widget _buildProgress(DownloadProgressInfo? info, {bool isPaused = false}) {
+
     if (info == null) {
       return const Padding(
         padding: EdgeInsets.only(top: 12.0),
@@ -198,9 +200,10 @@ class ModelDownloadCard extends StatelessWidget {
               style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
             ),
              Text(
-              info.speedText,
+              isPaused ? '0 KB/s' : info.speedText,
               style: const TextStyle(color: AppTheme.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
             ),
+
             Text(
               info.percentageText,
               style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),

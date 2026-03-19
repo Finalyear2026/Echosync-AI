@@ -335,6 +335,18 @@ class AppProvider extends ChangeNotifier {
     _isDownloading = false;
     _currentlyDownloading = null;
     _pausedModels.add(modelId);
+    
+    // Reset speed to 0 so the UI shows 0 KB/s immediately upon pause
+    final info = _downloadProgress[modelId];
+    if (info != null) {
+      _downloadProgress[modelId] = DownloadProgressInfo(
+        progress: info.progress,
+        downloadedBytes: info.downloadedBytes,
+        totalBytes: info.totalBytes,
+        speedBytesPerSecond: 0,
+      );
+    }
+
     LoggingService().log(
       'Model download paused by user',
       category: 'MODELS',

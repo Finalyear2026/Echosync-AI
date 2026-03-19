@@ -14,22 +14,25 @@ class ModelManagerService {
   final Map<String, double> _downloadProgress = {};
   final Map<String, CancelToken> _cancelTokens = {};
 
-  static const String registryDriveId = '1sMAYeFQlzuya_ncuj0fz9XkypVd8J9S0';
+  static const String registryUrl = 'https://raw.githubusercontent.com/ahmadali8186105/echosync_ai_registry/refs/heads/main/models.json';
   
   /// Get direct download link for Google Drive ID
   String _getDriveDownloadUrl(String fileId) => 
       'https://drive.google.com/uc?export=download&id=$fileId';
 
-  /// Fetch the cloud registry from Google Drive
+  /// Fetch the cloud registry from GitHub
   Future<Map<String, dynamic>> fetchCloudRegistry() async {
     try {
       final response = await _dio.get(
-        _getDriveDownloadUrl(registryDriveId),
+        registryUrl,
         options: Options(
           receiveTimeout: const Duration(seconds: 15),
           sendTimeout: const Duration(seconds: 15),
+          // We add a timestamp or clear cache to ensure we get the latest file
+          extra: {'_ts': DateTime.now().millisecondsSinceEpoch},
         ),
       );
+      
       if (response.statusCode == 200) {
         final data = response.data;
         if (data is Map<String, dynamic>) {
@@ -39,9 +42,9 @@ class ModelManagerService {
         }
         throw Exception('Unexpected response format: ${data.runtimeType}');
       }
-      throw Exception('Failed to fetch registry: ${response.statusCode}');
+      throw Exception('Failed to fetch registry from GitHub: ${response.statusCode}');
     } catch (e) {
-      debugPrint('ModelManager: Registry fetch error: $e');
+      debugPrint('ModelManager: GitHub registry fetch error: $e');
       rethrow;
     }
   }
