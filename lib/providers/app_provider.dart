@@ -21,6 +21,8 @@ class AppProvider extends ChangeNotifier {
   bool _isInitialized = false;
   Duration _recordingDuration = Duration.zero;
   final Map<String, bool> _modelStatuses = {};
+  final Set<String> _pausedModels = {}; // Track models that are manually paused
+
 
   // Cloud Registry
   List<dynamic> _cloudCategories = [];
@@ -69,6 +71,11 @@ class AppProvider extends ChangeNotifier {
   bool get isRegistryLoading => _isRegistryLoading;
   String? get registryError => _registryError;
   Map<String, String> get activeModels => _activeModels;
+  Set<String> get pausedModels => _pausedModels;
+  
+  /// Check if a model is currently paused
+  bool isPaused(String modelId) => _pausedModels.contains(modelId);
+
   
   // Helper to check if a specific model is downloaded
   bool isModelDownloaded(String modelId) {
@@ -122,6 +129,26 @@ class AppProvider extends ChangeNotifier {
       details: {'count': statuses.length, 'downloaded_count': statuses.values.where((v) => v).length},
     );
     
+    // Also check for partial downloads to show "Resume" status
+    for (final category in _cloudCategories) {
+      final models = category['models'] as List;
+      for (final m in models) {
+        final id = m['id'];
+        final pInfo = await _modelManager.getPartialDownloadInfo(
+          id, 
+          filename: m['filename'],
+          expectedSize: m['size_bytes'],
+        );
+        
+        if (pInfo != null && !statuses[id]!) {
+          _pausedModels.add(id);
+          _downloadProgress[id] = pInfo;
+        } else {
+          _pausedModels.remove(id);
+        }
+      }
+    }
+
     notifyListeners();
   }
 
@@ -252,7 +279,9 @@ class AppProvider extends ChangeNotifier {
   }) async {
     _isDownloading = true;
     _currentlyDownloading = modelId;
+    _pausedModels.remove(modelId); // Remove from paused if we are starting/resuming
     notifyListeners();
+
 
     try {
       LoggingService().log(
@@ -300,11 +329,27 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  /// Cancel model download
-  void cancelDownload(String modelId) {
-    _modelManager.cancelDownload(modelId);
+  /// Pause model download
+  void pauseDownload(String modelId) {
+    _modelManager.pauseDownload(modelId);
     _isDownloading = false;
     _currentlyDownloading = null;
+    _pausedModels.add(modelId);
+    LoggingService().log(
+      'Model download paused by user',
+      category: 'MODELS',
+      details: {'model_id': modelId},
+    );
+    notifyListeners();
+  }
+
+  /// Cancel model download completely
+  void cancelDownload(String modelId, {String? filename}) {
+    _modelManager.cancelDownload(modelId, filename: filename);
+    _isDownloading = false;
+    _currentlyDownloading = null;
+    _pausedModels.remove(modelId);
+    _downloadProgress.remove(modelId);
     LoggingService().log(
       'Model download cancelled by user',
       category: 'MODELS',

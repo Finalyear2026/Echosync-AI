@@ -123,8 +123,30 @@ class ModelManagerService {
     final dirName = p.basenameWithoutExtension(actualFilename);
     final dir = Directory(p.join(modelsDirPath, dirName));
     if (dir.existsSync()) {
-      LoggingService().log('Found extracted directory', category: 'MODELS_DEBUG', details: {'path': dir.path});
+      LoggingService().log('Found exact extracted directory', category: 'MODELS_DEBUG', details: {'path': dir.path});
       return true;
+    }
+
+    // Try a few common variations or check the modelsDirPath for any common subfolders
+    // If it's a zip and the zip file is missing but we've seen it before, 
+    // we could check the models directory for non-zip entries
+    try {
+      if (isZip) {
+        final dirEntries = Directory(modelsDirPath).listSync();
+        for (final entry in dirEntries) {
+          if (entry is Directory) {
+            final entryName = p.basename(entry.path).toLowerCase();
+            final targetName = dirName.toLowerCase();
+            // Match if entry starts with or is similar to our targetName
+            if (entryName == targetName || entryName.contains(targetName) || targetName.contains(entryName)) {
+               LoggingService().log('Found similar extracted directory', category: 'MODELS_DEBUG', details: {'found': entryName, 'target': targetName});
+               return true;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore list errors
     }
 
     // 2. Check for the file itself (either the model bin or the zip file)
@@ -260,19 +282,28 @@ class ModelManagerService {
       // 3. Finalize file
       await tempFile.rename(filePath);
       
-      // 4. Handle Zip extraction
-      if (isZip) {
-        await _extractZip(filePath, modelsDirPath);
-      }
-
-      _downloadProgress[modelKey] = 1.0;
       final finalSize = await File(filePath).length();
+      _downloadProgress[modelKey] = 1.0;
       onProgress?.call(DownloadProgressInfo(
         progress: 1.0,
         downloadedBytes: finalSize,
         totalBytes: finalSize,
         speedBytesPerSecond: 0,
       ));
+
+      // 4. Handle Zip extraction
+      if (isZip) {
+        LoggingService().log('Extracting model zip', category: 'MODELS', details: {'path': filePath});
+        try {
+          await _extractZip(filePath, modelsDirPath);
+          LoggingService().log('Extraction complete, zip deleted', category: 'MODELS');
+        } catch (e) {
+          LoggingService().log('Extraction failed', category: 'MODELS_ERROR', details: {'error': e.toString()});
+          // If extraction fails, we still have the zip
+          rethrow;
+        }
+      }
+
       return filePath;
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
@@ -285,30 +316,83 @@ class ModelManagerService {
   }
 
   /// Extract zip file to directory
-  Future<void> _extractZip(String zipPath, String targetDir) async {
+  Future<void> _extractZip(String zipPath, String modelsDirPath) async {
     final bytes = await File(zipPath).readAsBytes();
     final archive = ZipDecoder().decodeBytes(bytes);
-
+    
     for (final file in archive) {
       final filename = file.name;
       if (file.isFile) {
         final data = file.content as List<int>;
-        File(p.join(targetDir, filename))
+        File(p.join(modelsDirPath, filename))
           ..createSync(recursive: true)
           ..writeAsBytesSync(data);
       } else {
-        Directory(p.join(targetDir, filename)).createSync(recursive: true);
+        Directory(p.join(modelsDirPath, filename)).createSync(recursive: true);
       }
     }
     // Delete zip after extraction to save space
-    await File(zipPath).delete();
+    if (await File(zipPath).exists()) {
+      await File(zipPath).delete();
+    }
   }
 
-  /// Cancel a running download
-  void cancelDownload(String modelKey) {
+  /// Get progress info for a partial download to restore UI state
+  Future<DownloadProgressInfo?> getPartialDownloadInfo(String modelId, {String? filename, int? expectedSize}) async {
+    final info = models[modelId];
+    final actualFilename = filename ?? info?.filename;
+    final actualSize = expectedSize ?? info?.sizeBytes ?? 0;
+    if (actualFilename == null || actualSize <= 0) return null;
+    
+    final modelsDirPath = await modelsDir;
+    final tempFile = File(p.join(modelsDirPath, '$actualFilename.part'));
+    if (await tempFile.exists()) {
+      final downloaded = await tempFile.length();
+      return DownloadProgressInfo(
+        progress: downloaded / actualSize,
+        downloadedBytes: downloaded,
+        totalBytes: actualSize,
+        speedBytesPerSecond: 0,
+      );
+    }
+    return null;
+  }
+
+  /// Check if a model has a partial download file
+  Future<bool> isModelPartiallyDownloaded(String modelId, {String? filename}) async {
+    final info = models[modelId];
+    final actualFilename = filename ?? info?.filename;
+    if (actualFilename == null) return false;
+    
+    final modelsDirPath = await modelsDir;
+    final tempPath = p.join(modelsDirPath, '$actualFilename.part');
+    return File(tempPath).exists();
+  }
+
+  /// Pause a running download (removes token but keeps progress)
+  void pauseDownload(String modelKey) {
+    _cancelTokens[modelKey]?.cancel('User paused download');
+    _cancelTokens.remove(modelKey);
+    // Note: We DON'T remove _downloadProgress[modelKey] so we can show it in UI
+  }
+
+  /// Cancel a running download and optionally delete the partial file
+  Future<void> cancelDownload(String modelKey, {String? filename}) async {
     _cancelTokens[modelKey]?.cancel('User cancelled download');
     _cancelTokens.remove(modelKey);
     _downloadProgress.remove(modelKey);
+    
+    // Optionally delete the partial file
+    final info = models[modelKey];
+    final actualFilename = filename ?? info?.filename;
+    if (actualFilename != null) {
+      final modelsDirPath = await modelsDir;
+      final tempPath = p.join(modelsDirPath, '$actualFilename.part');
+      final tempFile = File(tempPath);
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    }
   }
 
   /// Delete a downloaded model

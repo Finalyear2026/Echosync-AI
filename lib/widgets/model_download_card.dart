@@ -32,6 +32,7 @@ class ModelDownloadCard extends StatelessWidget {
         final downloadInfo = provider.downloadProgress[modelId];
         final isDownloading = provider.currentlyDownloading == modelId;
         final sizeMB = (sizeBytes / (1024 * 1024)).toStringAsFixed(1);
+        final isPaused = provider.isPaused(modelId);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -53,13 +54,14 @@ class ModelDownloadCard extends StatelessWidget {
                   _buildIcon(isDownloaded),
                   const SizedBox(width: 12),
                   _buildDetails(sizeMB),
-                  _buildActions(context, provider, isDownloaded, isDownloading),
+                  _buildActions(context, provider, isDownloaded, isDownloading, isPaused),
                 ],
               ),
-              if (isDownloading) _buildProgress(downloadInfo),
+              if (isDownloading || isPaused) _buildProgress(downloadInfo),
             ],
           ),
         );
+
       },
     );
   }
@@ -93,7 +95,7 @@ class ModelDownloadCard extends StatelessWidget {
     );
   }
 
-  Widget _buildActions(BuildContext context, AppProvider provider, bool isDownloaded, bool isDownloading) {
+  Widget _buildActions(BuildContext context, AppProvider provider, bool isDownloaded, bool isDownloading, bool isPaused) {
     if (isDownloaded) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -116,16 +118,39 @@ class ModelDownloadCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            onPressed: () => provider.cancelDownload(modelId),
+            onPressed: () => provider.pauseDownload(modelId),
             icon: const Icon(Icons.pause_circle_outline, color: AppTheme.accentCyan),
           ),
           IconButton(
-            onPressed: () => provider.cancelDownload(modelId),
+            onPressed: () => provider.cancelDownload(modelId, filename: filename),
             icon: const Icon(Icons.cancel_outlined, color: AppTheme.textMuted),
           ),
         ],
       );
     }
+
+    if (isPaused) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: () => provider.downloadModel(
+              modelId,
+              driveId: driveId,
+              isZip: isZip,
+              expectedSize: sizeBytes,
+              filename: filename,
+            ),
+            icon: const Icon(Icons.play_circle_outline, color: AppTheme.accentCyan),
+          ),
+          IconButton(
+            onPressed: () => provider.cancelDownload(modelId, filename: filename),
+            icon: const Icon(Icons.cancel_outlined, color: AppTheme.textMuted),
+          ),
+        ],
+      );
+    }
+
 
     return ElevatedButton(
       onPressed: () => provider.downloadModel(
