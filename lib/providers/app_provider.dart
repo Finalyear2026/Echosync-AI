@@ -93,7 +93,12 @@ class AppProvider extends ChangeNotifier {
         await _settings.initialize();
       }
       await LoggingService().init();
-      await _modelManager.validateModelFiles();
+      
+      // Ensure local registry (models.json) exists at startup
+      // Load local repository metadata
+      final localRegistry = await _modelManager.loadLocalRegistry();
+      _cloudCategories = localRegistry['categories'] ?? [];
+      
       await _pipeline.initialize();
       await refreshModelStatuses();
       _isInitialized = true;
@@ -231,9 +236,14 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Refresh cloud models from Drive
+  /// Refresh cloud models from GitHub with ETag support
   Future<void> refreshCloudModels({bool force = false}) async {
-    if (!force && _cloudCategories.isNotEmpty) return;
+    if (!force && _cloudCategories.isNotEmpty && !_isRegistryLoading) {
+      // Background sync if already have data
+      _syncInBackground();
+      return;
+    }
+    
     if (_isRegistryLoading) return;
 
     _isRegistryLoading = true;
@@ -241,25 +251,41 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final registry = await _modelManager.fetchCloudRegistry();
-      _cloudCategories = registry['categories'] ?? [];
-      LoggingService().log(
-        'Cloud models registry fetched successfully',
-        category: 'MODELS',
-        details: {'category_count': _cloudCategories.length},
-      );
+      // 1. Load Local first for instant UI
+      final localRegistry = await _modelManager.loadLocalRegistry();
+      _cloudCategories = localRegistry['categories'] ?? [];
       await refreshModelStatuses();
+      notifyListeners();
+
+      // 2. Then Sync with Cloud (GitHub)
+      final updatedRegistry = await _modelManager.syncRegistryWithCloud(_settings);
+      if (updatedRegistry != null) {
+        _cloudCategories = updatedRegistry['categories'] ?? [];
+        await refreshModelStatuses();
+        LoggingService().log('Cloud registry updated and applied', category: 'MODELS');
+      }
     } catch (e) {
       _registryError = 'Failed to load models: $e';
-      LoggingService().log(
-        'Cloud models registry fetch failed',
-        category: 'MODELS_ERROR',
-        details: {'error': e.toString()},
-      );
-      debugPrint('AppProvider: Cloud refresh failed: $e');
+      LoggingService().log('Registry fetch failed', category: 'MODELS_ERROR', details: {'error': e.toString()});
     } finally {
       _isRegistryLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Perform a quiet background sync without showing loading spinners
+  Future<void> _syncInBackground() async {
+    try {
+      final updatedRegistry = await _modelManager.syncRegistryWithCloud(_settings);
+      if (updatedRegistry != null) {
+        _cloudCategories = updatedRegistry['categories'] ?? [];
+        await refreshModelStatuses();
+        notifyListeners();
+        LoggingService().log('Background registry sync completed', category: 'MODELS');
+      }
+    } catch (e) {
+      // Fail silently in background
+      debugPrint('AppProvider: Background sync failed: $e');
     }
   }
 
@@ -466,6 +492,12 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> deleteSnippet(String id) async {
     await _settings.deleteSnippet(id);
+    notifyListeners();
+  }
+
+  /// Clear the general error message
+  void clearErrorMessage() {
+    _errorMessage = null;
     notifyListeners();
   }
 }

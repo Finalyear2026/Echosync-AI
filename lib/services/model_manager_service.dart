@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/services.dart' show rootBundle;
 import 'logging_service.dart';
+import 'settings_service.dart';
 
 /// Manages downloading and storage of AI model files.
 /// Supports resumable downloads with progress tracking.
@@ -16,38 +18,106 @@ class ModelManagerService {
 
   static const String registryUrl = 'https://raw.githubusercontent.com/ahmadali8186105/echosync_ai_registry/refs/heads/main/models.json';
   
-  /// Get direct download link for Google Drive ID
-  String _getDriveDownloadUrl(String fileId) => 
-      'https://drive.google.com/uc?export=download&id=$fileId';
+  /// Get the local registry file path
+  Future<File> get _localRegistryFile async {
+    final mDir = await modelsDir;
+    final path = p.join(mDir, 'models.json');
+    return File(path);
+  }
 
-  /// Fetch the cloud registry from GitHub
-  Future<Map<String, dynamic>> fetchCloudRegistry() async {
+  /// Ensure the local registry exists (copies from assets on first run)
+  Future<void> ensureLocalRegistryExists() async {
+    final file = await _localRegistryFile;
+    if (!file.existsSync()) {
+      LoggingService().log('Local registry missing, copying from assets', category: 'MODELS');
+      try {
+        final data = await rootBundle.loadString('assets/models.json');
+        await file.writeAsString(data);
+        LoggingService().log('Asset registry copied successfully', category: 'MODELS');
+      } catch (e) {
+        LoggingService().log('Failed to copy asset registry', category: 'MODELS_ERROR', details: {'error': e.toString()});
+      }
+    }
+  }
+
+  /// Load the current local registry content
+  Future<Map<String, dynamic>> loadLocalRegistry() async {
+    await ensureLocalRegistryExists();
+    final file = await _localRegistryFile;
     try {
+      final content = await file.readAsString();
+      return jsonDecode(content) as Map<String, dynamic>;
+    } catch (e) {
+      LoggingService().log('Failed to read local registry', category: 'MODELS_ERROR', details: {'error': e.toString()});
+      return {'categories': []}; // Fallback
+    }
+  }
+
+  /// Fetch the cloud registry with ETag support and atomic updates
+  Future<Map<String, dynamic>?> syncRegistryWithCloud(SettingsService settings) async {
+    try {
+      final currentEtag = settings.getRegistryEtag();
+      
       final response = await _dio.get(
         registryUrl,
         options: Options(
+          headers: currentEtag != null ? {'If-None-Match': currentEtag} : null,
           receiveTimeout: const Duration(seconds: 15),
           sendTimeout: const Duration(seconds: 15),
-          // We add a timestamp or clear cache to ensure we get the latest file
-          extra: {'_ts': DateTime.now().millisecondsSinceEpoch},
+          validateStatus: (status) => status != null && (status == 200 || status == 304),
         ),
       );
-      
+
+      if (response.statusCode == 304) {
+        LoggingService().log('Registry not modified (304)', category: 'MODELS');
+        return null; // No update needed
+      }
+
       if (response.statusCode == 200) {
         final data = response.data;
-        if (data is Map<String, dynamic>) {
-          return data;
-        } else if (data is String) {
-          return jsonDecode(data) as Map<String, dynamic>;
+        final newEtag = response.headers.value('etag');
+        
+        LoggingService().log('New registry version found', category: 'MODELS', details: {'etag': newEtag});
+
+        // Atomic Swap: Write to temp file first
+        final file = await _localRegistryFile;
+        final tempFile = File(p.join(file.parent.path, 'models_temp.json'));
+        
+        String content;
+        if (data is Map) {
+          content = jsonEncode(data);
+        } else {
+          content = data.toString();
         }
-        throw Exception('Unexpected response format: ${data.runtimeType}');
+
+        await tempFile.writeAsString(content);
+        
+        // Finalize: Rename temp to original
+        if (file.existsSync()) await file.delete();
+        await tempFile.rename(file.path);
+
+        if (newEtag != null) {
+          await settings.setRegistryEtag(newEtag);
+        }
+
+        return data is Map<String, dynamic> ? data : jsonDecode(content);
       }
-      throw Exception('Failed to fetch registry from GitHub: ${response.statusCode}');
+      
+      return null;
     } catch (e) {
-      debugPrint('ModelManager: GitHub registry fetch error: $e');
-      rethrow;
+      LoggingService().log('Registry sync error', category: 'MODELS_ERROR', details: {'error': e.toString()});
+      return null;
     }
   }
+
+  /// Fetch the cloud registry from GitHub (load local first)
+  Future<Map<String, dynamic>> fetchCloudRegistry() async {
+    return loadLocalRegistry();
+  }
+
+  /// Get direct download link for Google Drive ID
+  String _getDriveDownloadUrl(String fileId) => 
+      'https://drive.google.com/uc?export=download&id=$fileId';
 
   /// Model definitions (Static fallbacks)
   static const Map<String, ModelInfo> models = {
@@ -250,12 +320,37 @@ class ModelManagerService {
     try {
     final raf = await tempFile.open(mode: FileMode.append);
     try {
+      // Handle Google Drive Large File "Confirm" logic
+      String finalUrl = url;
+      if (driveId != null) {
+        final initialResponse = await _dio.get(
+          url,
+          options: Options(
+            followRedirects: true,
+            responseType: ResponseType.plain,
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+        
+        // Check if we got the "virus scan" warning page
+        final body = initialResponse.data.toString();
+        if (body.contains('confirm=')) {
+          final regExp = RegExp(r'confirm=([a-zA-Z0-9_]+)');
+          final match = regExp.firstMatch(body);
+          if (match != null) {
+            final confirmToken = match.group(1);
+            finalUrl = '$url&confirm=$confirmToken';
+            LoggingService().log('GDrive large file: using confirm token', category: 'MODELS', details: {'token': confirmToken});
+          }
+        }
+      }
+
       final response = await _dio.get<ResponseBody>(
-        url,
+        finalUrl,
         cancelToken: cancelToken,
         options: Options(
           headers: existingLength > 0 ? {'range': 'bytes=$existingLength-'} : null,
-          receiveTimeout: const Duration(hours: 2),
+          receiveTimeout: const Duration(hours: 4),
           responseType: ResponseType.stream,
           followRedirects: true,
           validateStatus: (status) => status != null && status < 500,

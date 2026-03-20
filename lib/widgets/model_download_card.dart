@@ -12,6 +12,7 @@ class ModelDownloadCard extends StatelessWidget {
   final String driveId;
   final bool isZip;
   final String filename;
+  final bool isOnline;
 
   const ModelDownloadCard({
     super.key,
@@ -22,6 +23,7 @@ class ModelDownloadCard extends StatelessWidget {
     required this.driveId,
     required this.isZip,
     required this.filename,
+    required this.isOnline,
   });
 
   @override
@@ -135,14 +137,19 @@ class ModelDownloadCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            onPressed: () => provider.downloadModel(
-              modelId,
-              driveId: driveId,
-              isZip: isZip,
-              expectedSize: sizeBytes,
-              filename: filename,
+            onPressed: isOnline 
+              ? () => provider.downloadModel(
+                modelId,
+                driveId: driveId,
+                isZip: isZip,
+                expectedSize: sizeBytes,
+                filename: filename,
+              )
+              : () => _showOfflineMessage(context),
+            icon: Icon(
+              Icons.play_circle_outline, 
+              color: isOnline ? AppTheme.accentCyan : AppTheme.textMuted
             ),
-            icon: const Icon(Icons.play_circle_outline, color: AppTheme.accentCyan),
           ),
           IconButton(
             onPressed: () => provider.cancelDownload(modelId, filename: filename),
@@ -154,19 +161,37 @@ class ModelDownloadCard extends StatelessWidget {
 
 
     return ElevatedButton(
-      onPressed: () => provider.downloadModel(
-        modelId, 
-        driveId: driveId, 
-        isZip: isZip,
-        expectedSize: sizeBytes,
-        filename: filename,
-      ),
+      onPressed: isOnline 
+        ? () => provider.downloadModel(
+          modelId, 
+          driveId: driveId, 
+          isZip: isZip,
+          expectedSize: sizeBytes,
+          filename: filename,
+        )
+        : () => _showOfflineMessage(context),
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppTheme.primaryPurple,
+        backgroundColor: isOnline ? AppTheme.primaryPurple : AppTheme.textMuted.withOpacity(0.3),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         minimumSize: Size.zero,
       ),
-      child: const Text('Download', style: TextStyle(fontSize: 12)),
+      child: Text(
+        'Download', 
+        style: TextStyle(
+          fontSize: 12,
+          color: isOnline ? Colors.white : Colors.white24,
+        )
+      ),
+    );
+  }
+
+  void _showOfflineMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('you are offline'),
+        backgroundColor: Colors.redAccent,
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 

@@ -60,7 +60,7 @@ my_setup_info.txt
 transcription app_specification.txt
 changes_v_0_2_0.txt
 prompt.txt
-models.json
+models*.json
 
 
 # Flutter-specific

@@ -30,9 +30,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
         category: 'SCREEN_MODELS',
         details: {'is_online': connected},
       );
-      if (connected) {
-        context.read<AppProvider>().refreshCloudModels();
-      }
+      context.read<AppProvider>().refreshCloudModels();
     });
 
     LoggingService().log(
@@ -45,9 +43,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
     final connected = await _connectivity.checkConnection();
     if (mounted) {
       setState(() => _isOnline = connected);
-      if (connected) {
-        context.read<AppProvider>().refreshCloudModels();
-      }
+      context.read<AppProvider>().refreshCloudModels();
     }
   }
 
@@ -152,12 +148,9 @@ class _ModelsScreenState extends State<ModelsScreen> {
               final category = categories[index];
               final models = category['models'] as List;
 
-              // Filter for offline mode: only show if at least one model is downloaded
-              final visibleModels = _isOnline 
-                ? models 
-                : models.where((m) => provider.isModelDownloaded(m['id'])).toList();
+              final visibleModels = models;
 
-              if (visibleModels.isEmpty && !_isOnline) return const SizedBox.shrink();
+              if (visibleModels.isEmpty) return const SizedBox.shrink();
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,6 +174,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
                     driveId: model['drive_id'],
                     isZip: model['is_zip'] ?? false,
                     filename: model['filename'],
+                    isOnline: _isOnline,
                   )),
                 ],
               );

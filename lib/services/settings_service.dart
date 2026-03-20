@@ -69,6 +69,16 @@ class SettingsService {
     await saveSettings(settings);
   }
 
+  // --- Model Registry Sync ---
+
+  String? getRegistryEtag() {
+    return _settingsBox.get('registryEtag') as String?;
+  }
+
+  Future<void> setRegistryEtag(String etag) async {
+    await _settingsBox.put('registryEtag', etag);
+  }
+
   // --- Personal Dictionary ---
 
   List<DictionaryEntry> getDictionary() {
