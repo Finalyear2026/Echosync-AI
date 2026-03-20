@@ -30,7 +30,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
         category: 'SCREEN_MODELS',
         details: {'is_online': connected},
       );
-      context.read<AppProvider>().refreshCloudModels();
+      context.read<AppProvider>().refreshCloudModels(force: true);
     });
 
     LoggingService().log(
@@ -43,7 +43,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
     final connected = await _connectivity.checkConnection();
     if (mounted) {
       setState(() => _isOnline = connected);
-      context.read<AppProvider>().refreshCloudModels();
+      context.read<AppProvider>().refreshCloudModels(force: true);
     }
   }
 
