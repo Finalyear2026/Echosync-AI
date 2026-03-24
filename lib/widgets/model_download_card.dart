@@ -32,7 +32,7 @@ class ModelDownloadCard extends StatelessWidget {
       builder: (context, provider, child) {
         final isDownloaded = provider.isModelDownloaded(modelId);
         final downloadInfo = provider.downloadProgress[modelId];
-        final isDownloading = provider.currentlyDownloading == modelId;
+        final isDownloading = provider.isModelDownloading(modelId);
         final sizeMB = (sizeBytes / (1024 * 1024)).toStringAsFixed(1);
         final isPaused = provider.isPaused(modelId);
 

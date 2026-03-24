@@ -26,8 +26,7 @@ class AppProvider extends ChangeNotifier {
 
   // Cloud Registry
   List<dynamic> _cloudCategories = [];
-  bool _isDownloading = false;
-  String? _currentlyDownloading;
+  final Set<String> _activeDownloadIds = {};
   final Map<String, DownloadProgressInfo> _downloadProgress = {};
   
   // Registry state
@@ -58,8 +57,9 @@ class AppProvider extends ChangeNotifier {
   Duration get recordingDuration => _recordingDuration;
   Map<String, DownloadProgressInfo> get downloadProgress => _downloadProgress;
   Map<String, bool> get modelStatuses => _modelStatuses;
-  bool get isDownloading => _isDownloading;
-  String? get currentlyDownloading => _currentlyDownloading;
+  bool get isDownloading => _activeDownloadIds.isNotEmpty;
+  Set<String> get activeDownloadIds => _activeDownloadIds;
+  bool isModelDownloading(String modelId) => _activeDownloadIds.contains(modelId);
 
   AppSettings get appSettings =>
       _isInitialized ? _settings.getSettings() : AppSettings();
@@ -303,8 +303,7 @@ class AppProvider extends ChangeNotifier {
     int? expectedSize,
     String? filename,
   }) async {
-    _isDownloading = true;
-    _currentlyDownloading = modelId;
+    _activeDownloadIds.add(modelId);
     _pausedModels.remove(modelId); // Remove from paused if we are starting/resuming
     notifyListeners();
 
@@ -349,8 +348,7 @@ class AppProvider extends ChangeNotifier {
       );
       notifyListeners();
     } finally {
-      _isDownloading = false;
-      _currentlyDownloading = null;
+      _activeDownloadIds.remove(modelId);
       notifyListeners();
     }
   }
@@ -358,8 +356,7 @@ class AppProvider extends ChangeNotifier {
   /// Pause model download
   void pauseDownload(String modelId) {
     _modelManager.pauseDownload(modelId);
-    _isDownloading = false;
-    _currentlyDownloading = null;
+    _activeDownloadIds.remove(modelId);
     _pausedModels.add(modelId);
     
     // Reset speed to 0 so the UI shows 0 KB/s immediately upon pause
@@ -384,8 +381,7 @@ class AppProvider extends ChangeNotifier {
   /// Cancel model download completely
   void cancelDownload(String modelId, {String? filename}) {
     _modelManager.cancelDownload(modelId, filename: filename);
-    _isDownloading = false;
-    _currentlyDownloading = null;
+    _activeDownloadIds.remove(modelId);
     _pausedModels.remove(modelId);
     _downloadProgress.remove(modelId);
     LoggingService().log(

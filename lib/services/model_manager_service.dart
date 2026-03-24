@@ -322,26 +322,69 @@ class ModelManagerService {
     try {
       // Handle Google Drive Large File "Confirm" logic
       String finalUrl = url;
+      String? cookieHeader;
+
       if (driveId != null) {
+        // Use a browser-like User-Agent to avoid being blocked as a bot
+        const browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+        
         final initialResponse = await _dio.get(
           url,
           options: Options(
             followRedirects: true,
             responseType: ResponseType.plain,
+            headers: {'User-Agent': browserUserAgent},
             validateStatus: (status) => status != null && status < 500,
           ),
         );
         
-        // Check if we got the "virus scan" warning page
+        // Extract cookies to maintain session for the confirmation
+        final setCookies = initialResponse.headers['set-cookie'];
+        if (setCookies != null && setCookies.isNotEmpty) {
+          // Join all cookies, taking only the key=value part
+          cookieHeader = setCookies.map((c) => c.split(';').first).join('; ');
+        }
+
+        // Check if we got the "virus scan" warning page or login page
         final body = initialResponse.data.toString();
-        if (body.contains('confirm=')) {
-          final regExp = RegExp(r'confirm=([a-zA-Z0-9_]+)');
-          final match = regExp.firstMatch(body);
-          if (match != null) {
-            final confirmToken = match.group(1);
-            finalUrl = '$url&confirm=$confirmToken';
-            LoggingService().log('GDrive large file: using confirm token', category: 'MODELS', details: {'token': confirmToken});
+        
+        // Check for common error messages
+        if (body.contains('Google Drive - Quota exceeded') || 
+            body.contains('too many users have viewed or downloaded this file')) {
+          throw Exception('Google Drive download quota exceeded for this file. Please try again in 24 hours or choose a different model.');
+        }
+
+        // Improved Token extraction from multiple possible locations in the HTML
+        String? confirmToken;
+        
+        // Pattern 1: confirm=TOKEN in URL/links
+        final urlMatch = RegExp(r'confirm=([a-zA-Z0-9_-]+)').firstMatch(body);
+        if (urlMatch != null) {
+          confirmToken = urlMatch.group(1);
+        } else {
+          // Pattern 2: <input type="hidden" name="confirm" value="TOKEN">
+          final inputMatch = RegExp(r'name="confirm"\s+value="([^"]+)"').firstMatch(body) ?? 
+                            RegExp(r'value="([^"]+)"\s+name="confirm"').firstMatch(body);
+          if (inputMatch != null) {
+            confirmToken = inputMatch.group(1);
+          } else {
+            // Pattern 3: Look for confirm in the entire body strings (more aggressive)
+            final genericMatch = RegExp(r'confirm=([a-zA-Z0-9_-]+)').firstMatch(body);
+            if (genericMatch != null) {
+              confirmToken = genericMatch.group(1);
+            }
           }
+        }
+
+        if (confirmToken != null) {
+          // Use the secure download domain
+          finalUrl = 'https://drive.usercontent.google.com/download?id=$driveId&confirm=$confirmToken&export=download';
+          LoggingService().log('GDrive large file: using confirm token', category: 'MODELS', details: {'token': confirmToken});
+        } 
+        // Pattern 4: static t as fallback if still nothing found but suspected large file
+        else if (body.contains('confirm=t') || body.contains('download-form') || body.contains('Download anyway')) {
+          finalUrl = '$url&confirm=t';
+          LoggingService().log('GDrive large file: using static confirm token (t)', category: 'MODELS');
         }
       }
 
@@ -349,13 +392,31 @@ class ModelManagerService {
         finalUrl,
         cancelToken: cancelToken,
         options: Options(
-          headers: existingLength > 0 ? {'range': 'bytes=$existingLength-'} : null,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            if (existingLength > 0) 'range': 'bytes=$existingLength-',
+            if (cookieHeader != null) 'cookie': cookieHeader,
+          },
           receiveTimeout: const Duration(hours: 4),
           responseType: ResponseType.stream,
           followRedirects: true,
           validateStatus: (status) => status != null && status < 500,
         ),
       );
+
+      // Validate that we are not downloading an HTML page (error page) 
+      // when we expect a large binary model
+      final contentType = response.headers.value('content-type') ?? '';
+      if (contentType.contains('text/html') && actualExpectedSize > 100000) {
+        // If we still get HTML after confirmation, it might be a block or a quota limit
+        final checkBodyResponse = await _dio.get(finalUrl, options: Options(responseType: ResponseType.plain, headers: {'User-Agent': 'Mozilla/5.0'}));
+        final errBody = checkBodyResponse.data.toString();
+        if (errBody.contains('quota') || errBody.contains('exceeded')) {
+           throw Exception('Google Drive quota exceeded. Try again in 24h or use a smaller model.');
+        }
+        throw Exception('Download failed: Google Drive is still serving a warning page. This usually happens if the automated confirmation is blocked. Please try one more time or check if your internet has restrictions.');
+      }
+
 
       // Handle server responding with full content (200) instead of partial (206)
       // This happens if the server doesn't support the range header
@@ -374,6 +435,12 @@ class ModelManagerService {
       final stream = response.data!.stream;
       int received = 0;
       final total = int.tryParse(response.headers.value('content-length') ?? '-1') ?? -1;
+      
+      // Guard against suspiciously small downloads from Google Drive (likely warning pages)
+      if (total > 0 && total < 50000 && actualExpectedSize > 1000000) {
+         throw Exception('Download failed: Received incomplete file. This usually happens when Google Drive blocks automated downloads. Try again in a few minutes.');
+      }
+
 
       await for (final chunk in stream) {
         if (cancelToken.isCancelled) {
@@ -411,6 +478,15 @@ class ModelManagerService {
       await tempFile.rename(filePath);
       
       final finalSize = await File(filePath).length();
+      
+      // Verification: Check for size mismatch
+      if (actualExpectedSize > 0 && finalSize < actualExpectedSize * 0.9) {
+        // If it's a ZIP, it might be slightly smaller but not 10x smaller
+        if (finalSize < 100000) { // Under 100KB is definitely wrong for these models
+           throw Exception('Download failed: The saved file is too small ($finalSize bytes). It is likely a corrupted error page.');
+        }
+      }
+
       _downloadProgress[modelKey] = 1.0;
       onProgress?.call(DownloadProgressInfo(
         progress: 1.0,
