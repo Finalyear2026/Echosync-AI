@@ -42,7 +42,17 @@ class AppProvider extends ChangeNotifier {
     required ModelManagerService modelManager,
   })  : _pipeline = pipeline,
         _settings = settings,
-        _modelManager = modelManager;
+        _modelManager = modelManager {
+    // Sync initial active models from results of settings
+    _syncActiveModelsFromSettings();
+  }
+
+  void _syncActiveModelsFromSettings() {
+    final s = _settings.getSettings();
+    _activeModels['stt'] = s.whisperModel;
+    _activeModels['nlp'] = s.nlpModel;
+    _activeModels['noise_cleaning'] = s.noiseCleaningModel;
+  }
 
   // Getters
   ProcessingStage get stage => _stage;
@@ -60,6 +70,95 @@ class AppProvider extends ChangeNotifier {
   bool get isDownloading => _activeDownloadIds.isNotEmpty;
   Set<String> get activeDownloadIds => _activeDownloadIds;
   bool isModelDownloading(String modelId) => _activeDownloadIds.contains(modelId);
+  Map<String, String> get activeModels => _activeModels;
+
+  /// Get active model names for display
+  Map<String, String> getActiveModelNames() {
+    final Map<String, String> names = {};
+    for (final category in _cloudCategories) {
+      final categoryId = category['id'] as String;
+      final categoryName = category['name'] as String;
+      final activeId = _activeModels[categoryId];
+      
+      if (activeId == null || activeId.isEmpty) {
+        names[categoryName] = 'None';
+        continue;
+      }
+      
+      final models = category['models'] as List;
+      final model = models.firstWhere(
+        (m) => m['id'] == activeId, 
+        orElse: () => null
+      );
+      names[categoryName] = model != null ? model['name'] as String : 'Unknown';
+    }
+    return names;
+  }
+
+  /// Set a model as active for its category
+  Future<void> activateModel(String category, String modelId) async {
+    LoggingService().log('Activating model', category: 'MODELS', details: {'category': category, 'modelId': modelId});
+    
+    // 1. INSTANT UI UPDATE
+    _activeModels[category] = modelId;
+    notifyListeners();
+
+    // 2. BACKGROUND WORK (Non-blocking)
+    Future.microtask(() async {
+      try {
+        switch (category) {
+          case 'stt':
+            await _settings.updateWhisperModel(modelId);
+            await _pipeline.initialize();
+            break;
+          case 'nlp':
+            await _settings.updateNLPModel(modelId);
+            break;
+          case 'noise_cleaning':
+            await _settings.updateNoiseCleaningModel(modelId);
+            break;
+        }
+        notifyListeners(); // Second update to reflect any internal state changes after init
+      } catch (e) {
+        debugPrint('AppProvider: Background activation failed: $e');
+      }
+    });
+  }
+
+  /// Clear the active model for a category
+  Future<void> deactivateModel(String categoryId) async {
+    LoggingService().log('Deactivating model', category: 'MODELS', details: {'category': categoryId});
+    
+    // 1. INSTANT UI UPDATE
+    _activeModels[categoryId] = '';
+    notifyListeners();
+
+    // 2. BACKGROUND WORK (Non-blocking)
+    Future.microtask(() async {
+      try {
+        switch (categoryId) {
+          case 'stt':
+            await _settings.updateWhisperModel('');
+            await _pipeline.initialize();
+            break;
+          case 'nlp':
+            await _settings.updateNLPModel('');
+            break;
+          case 'noise_cleaning':
+            await _settings.updateNoiseCleaningModel('');
+            break;
+        }
+        notifyListeners();
+      } catch (e) {
+        debugPrint('AppProvider: Background deactivation failed: $e');
+      }
+    });
+  }
+
+  bool isModelActive(String categoryId, String modelId) {
+    if (modelId.isEmpty) return false;
+    return _activeModels[categoryId] == modelId;
+  }
 
   AppSettings get appSettings =>
       _isInitialized ? _settings.getSettings() : AppSettings();
@@ -70,7 +169,6 @@ class AppProvider extends ChangeNotifier {
   List<dynamic> get cloudCategories => _cloudCategories;
   bool get isRegistryLoading => _isRegistryLoading;
   String? get registryError => _registryError;
-  Map<String, String> get activeModels => _activeModels;
   Set<String> get pausedModels => _pausedModels;
   
   /// Check if a model is currently paused
@@ -154,7 +252,42 @@ class AppProvider extends ChangeNotifier {
       }
     }
 
+    await _ensureDefaultModelsSelected();
     notifyListeners();
+  }
+
+  /// Ensure active models are still valid (downloaded)
+  Future<void> _ensureDefaultModelsSelected() async {
+    bool changed = false;
+
+    for (final category in _cloudCategories) {
+      final categoryId = category['id'] as String;
+      String currentActive = _activeModels[categoryId] ?? '';
+
+      // If a model is selected, verify it's still available
+      if (currentActive.isNotEmpty) {
+        bool isActiveDownloaded = _modelStatuses[currentActive] ?? false;
+        
+        if (!isActiveDownloaded) {
+          LoggingService().log('Active model no longer available, clearing selection', 
+            category: 'MODELS', 
+            details: {'category': categoryId, 'modelId': currentActive});
+          
+          _activeModels[categoryId] = '';
+          switch (categoryId) {
+            case 'stt': await _settings.updateWhisperModel(''); break;
+            case 'nlp': await _settings.updateNLPModel(''); break;
+            case 'noise_cleaning': await _settings.updateNoiseCleaningModel(''); break;
+          }
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      // Re-initialize pipeline if an active model was cleared
+      await _pipeline.initialize();
+    }
   }
 
   /// Check if required models are downloaded
@@ -408,6 +541,7 @@ class AppProvider extends ChangeNotifier {
         details: {'model_id': modelId},
       );
       await refreshModelStatuses();
+      await _ensureDefaultModelsSelected();
       notifyListeners();
     } catch (e) {
       LoggingService().log(
@@ -419,17 +553,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  /// Toggle active model in category
-  void useModel(String categoryId, String modelId) {
-    _activeModels[categoryId] = modelId;
-    LoggingService().log(
-      'Model selected for use',
-      category: 'MODELS',
-      details: {'category_id': categoryId, 'model_id': modelId},
-    );
-    notifyListeners();
-    // In a real app, we'd persist this and re-init services
-  }
 
   // --- Settings mutations ---
 
@@ -444,7 +567,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> setWhisperModel(String model) async {
-    await _settings.setWhisperModel(model);
+    await _settings.updateWhisperModel(model);
     notifyListeners();
   }
 

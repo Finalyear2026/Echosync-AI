@@ -4,12 +4,16 @@ class AppSettings {
   TranscriptionStyle transcriptionStyle;
   TranscriptionTone transcriptionTone;
   String whisperModel;
+  String nlpModel;
+  String noiseCleaningModel;
   bool noiseFilterEnabled;
 
   AppSettings({
     this.transcriptionStyle = TranscriptionStyle.smart,
     this.transcriptionTone = TranscriptionTone.formal,
-    this.whisperModel = 'large-v3-turbo',
+    this.whisperModel = '',
+    this.nlpModel = '',
+    this.noiseCleaningModel = '',
     this.noiseFilterEnabled = true,
   });
 
@@ -17,6 +21,8 @@ class AppSettings {
         'transcriptionStyle': transcriptionStyle.index,
         'transcriptionTone': transcriptionTone.index,
         'whisperModel': whisperModel,
+        'nlpModel': nlpModel,
+        'noiseCleaningModel': noiseCleaningModel,
         'noiseFilterEnabled': noiseFilterEnabled,
       };
 
@@ -25,7 +31,9 @@ class AppSettings {
             TranscriptionStyle.values[json['transcriptionStyle'] as int? ?? 1],
         transcriptionTone:
             TranscriptionTone.values[json['transcriptionTone'] as int? ?? 0],
-        whisperModel: json['whisperModel'] as String? ?? 'large-v3-turbo',
+        whisperModel: json['whisperModel'] as String? ?? '',
+        nlpModel: json['nlpModel'] as String? ?? '',
+        noiseCleaningModel: json['noiseCleaningModel'] as String? ?? '',
         noiseFilterEnabled: json['noiseFilterEnabled'] as bool? ?? true,
       );
 }

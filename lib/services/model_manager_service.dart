@@ -119,42 +119,42 @@ class ModelManagerService {
   String _getDriveDownloadUrl(String fileId) => 
       'https://drive.google.com/uc?export=download&id=$fileId';
 
-  /// Model definitions (Static fallbacks)
+  /// Model definitions (Static fallbacks matching models.json IDs)
   static const Map<String, ModelInfo> models = {
-    'whisper-base': ModelInfo(
+    'whisper_base': ModelInfo(
       name: 'Whisper Base',
-      filename: 'ggml-base.bin',
+      filename: 'whisper_base.zip',
       url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-      sizeBytes: 150000000,
+      sizeBytes: 133064207,
       description: 'Fast, lightweight speech-to-text (~150MB)',
     ),
-    'whisper-small': ModelInfo(
+    'whisper_small': ModelInfo(
       name: 'Whisper Small',
-      filename: 'ggml-small.bin',
+      filename: 'whisper_small.zip',
       url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
-      sizeBytes: 250000000,
+      sizeBytes: 446077769,
       description: 'Balanced accuracy and speed (~250MB)',
     ),
-    'whisper-medium': ModelInfo(
+    'whisper_medium': ModelInfo(
       name: 'Whisper Medium',
-      filename: 'ggml-medium.bin',
+      filename: 'whisper_medium.zip',
       url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
-      sizeBytes: 500000000,
-      description: 'High accuracy speech-to-text (~500MB)',
+      sizeBytes: 1412421232,
+      description: 'High accuracy speech-to-text (~1.4GB)',
     ),
-    'whisper-large-v3-turbo': ModelInfo(
-      name: 'Whisper Large V3 Turbo',
-      filename: 'ggml-large-v3-turbo.bin',
+    'whisper_large_turbo': ModelInfo(
+      name: 'Whisper Large Turbo V3',
+      filename: 'whisper_large_turbo_v3.zip',
       url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin',
-      sizeBytes: 850000000,
-      description: 'Best accuracy, bilingual (EN/UR) (~850MB)',
+      sizeBytes: 1492498810,
+      description: 'Best accuracy, bilingual (EN/UR) (~1.5GB)',
     ),
-    'qwen2.5-1.5b': ModelInfo(
+    'qwen_2_5_1_5b': ModelInfo(
       name: 'Qwen2.5 1.5B Instruct',
-      filename: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+      filename: 'qwen2_5__1_5b_instruct_q4_k_m.zip',
       url: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
-      sizeBytes: 950000000,
-      description: 'Smart text formatting engine (~950MB)',
+      sizeBytes: 1091276760,
+      description: 'Smart text formatting engine (~1.1GB)',
     ),
   };
 
@@ -261,11 +261,36 @@ class ModelManagerService {
     }
   }
 
-  /// Get the local path for a model
+  /// Get the local path for a model binary
   Future<String> getModelPath(String modelKey) async {
     final info = models[modelKey];
     if (info == null) throw ArgumentError('Unknown model: $modelKey');
-    return p.join(await modelsDir, info.filename);
+    
+    final modelsDirPath = await modelsDir;
+    
+    // 1. Check for extracted directory (Zipped models)
+    final dirName = p.basenameWithoutExtension(info.filename);
+    final dir = Directory(p.join(modelsDirPath, dirName));
+    if (dir.existsSync()) {
+      try {
+        // Recursive search for the actual binary/checkpoint
+        final entries = dir.listSync(recursive: true);
+        for (final entry in entries) {
+           if (entry is File) {
+             final ext = p.extension(entry.path).toLowerCase();
+             // Support .bin (Whisper), .gguf (Llama), and .ckpt (DeepFilterNet)
+             if (ext == '.bin' || ext == '.gguf' || ext == '.ckpt' || entry.path.endsWith('.ckpt.best')) {
+               return entry.path;
+             }
+           }
+        }
+      } catch (e) {
+        debugPrint('ModelManager: Error searching folder: $e');
+      }
+    }
+    
+    // 2. Fallback to direct file (Not a zip or folder not found)
+    return p.join(modelsDirPath, info.filename);
   }
 
   /// Get download progress for a model (0.0 to 1.0)

@@ -50,8 +50,8 @@ class PipelineService {
       }
 
       // Check if LLM model is downloaded
-      if (await modelManager.isModelDownloaded('qwen2.5-1.5b')) {
-        final llmPath = await modelManager.getModelPath('qwen2.5-1.5b');
+      if (await modelManager.isModelDownloaded('qwen_2_5_1_5b')) {
+        final llmPath = await modelManager.getModelPath('qwen_2_5_1_5b');
         await llm.loadModel(llmPath);
       }
 
@@ -65,16 +65,25 @@ class PipelineService {
 
   /// Map settings whisper model name to model manager key
   String _mapWhisperModelKey(String model) {
-    switch (model.toLowerCase()) {
+    final m = model.toLowerCase();
+    if (m.contains('v3') || m.contains('turbo')) {
+      return 'unsupported';
+    }
+
+    switch (m) {
       case 'large-v3-turbo':
-        return 'whisper-large-v3-turbo';
+      case 'whisper_large_turbo':
+        return 'whisper_large_turbo';
       case 'medium':
-        return 'whisper-medium';
+      case 'whisper_medium':
+        return 'whisper_medium';
       case 'small':
-        return 'whisper-small';
+      case 'whisper_small':
+        return 'whisper_small';
       case 'base':
+      case 'whisper_base':
       default:
-        return 'whisper-base';
+        return 'whisper_base';
     }
   }
 
@@ -83,8 +92,10 @@ class PipelineService {
     final appSettings = settings.getSettings();
     final whisperKey = _mapWhisperModelKey(appSettings.whisperModel);
 
+    if (whisperKey == 'unsupported') return false;
+
     final whisperReady = await modelManager.isModelDownloaded(whisperKey);
-    final llmReady = await modelManager.isModelDownloaded('qwen2.5-1.5b');
+    final llmReady = await modelManager.isModelDownloaded('qwen_2_5_1_5b');
 
     // For raw mode, only whisper is needed
     if (appSettings.transcriptionStyle == TranscriptionStyle.raw) {

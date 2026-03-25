@@ -38,6 +38,11 @@ class HomeScreen extends StatelessWidget {
                           // Status badge
                           _StatusBadge(provider: provider),
 
+                          const SizedBox(height: 12),
+
+                          // Active models mini-display
+                          _ActiveModelsDisplay(provider: provider),
+
                           const SizedBox(height: 40),
 
                           // Record button
@@ -167,27 +172,44 @@ class HomeScreen extends StatelessWidget {
 
   void _handleRecordTap(BuildContext context, AppProvider provider) async {
     // Check if models are ready
-    final modelsReady = await provider.areModelsReady();
-    if (!modelsReady && !provider.isRecording) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-                'Please download required AI models first.'),
-            action: SnackBarAction(
-              label: 'Models',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const ModelsScreen(),
-                  ),
-                );
-              },
+    final appSettings = provider.appSettings;
+    final modelId = appSettings.whisperModel;
+    final isUnsupported = modelId.toLowerCase().contains('v3') || modelId.toLowerCase().contains('turbo');
+
+    if (!provider.isRecording) {
+      if (isUnsupported) {
+        if (context.mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Whisper V3/Turbo is not supported by the current engine. Please select Base, Small or Medium in Settings.'),
+              backgroundColor: Colors.orangeAccent,
             ),
-          ),
-        );
+          );
+        }
+        return;
       }
-      return;
+
+      final modelsReady = await provider.areModelsReady();
+      if (!modelsReady) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Please download required AI models first.'),
+              action: SnackBarAction(
+                label: 'Models',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ModelsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        }
+        return;
+      }
     }
 
     provider.toggleRecording();
@@ -317,6 +339,50 @@ class _NewRecordingButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
         ),
+      ),
+    );
+  }
+}
+class _ActiveModelsDisplay extends StatelessWidget {
+  final AppProvider provider;
+
+  const _ActiveModelsDisplay({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final activeModels = provider.getActiveModelNames();
+    if (activeModels.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Column(
+        children: activeModels.entries.map((entry) {
+          final isNone = entry.value == 'None';
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${entry.key}: ',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary.withOpacity(0.7),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                Text(
+                  entry.value,
+                  style: TextStyle(
+                    color: isNone ? Colors.orangeAccent.withOpacity(0.8) : AppTheme.accentCyan.withOpacity(0.9),
+                    fontSize: 11,
+                    fontWeight: isNone ? FontWeight.w400 : FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

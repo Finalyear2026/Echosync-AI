@@ -75,3 +75,6 @@ build/
 
 /scrcpy-win64-v3.3.4*
 /afm_cache/
+
+/config.json
+/tasbih.exe

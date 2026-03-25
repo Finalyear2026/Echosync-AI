@@ -166,16 +166,19 @@ class _ModelsScreenState extends State<ModelsScreen> {
                       ),
                     ),
                   ),
-                  ...visibleModels.map((model) => ModelDownloadCard(
-                    modelId: model['id'],
-                    name: model['name'],
-                    description: model['description'],
-                    sizeBytes: model['size_bytes'],
-                    driveId: model['drive_id'],
-                    isZip: model['is_zip'] ?? false,
-                    filename: model['filename'],
-                    isOnline: _isOnline,
-                  )),
+                  ...visibleModels.map((m) {
+                        return ModelDownloadCard(
+                          categoryId: category['id'],
+                          modelId: m['id'],
+                          name: m['name'],
+                          description: m['description'],
+                          sizeBytes: m['size_bytes'],
+                          driveId: m['drive_id'],
+                          isZip: m['is_zip'] ?? false,
+                          filename: m['filename'],
+                          isOnline: _isOnline,
+                        );
+                  }),
                 ],
               );
             },

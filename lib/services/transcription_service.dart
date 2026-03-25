@@ -15,7 +15,11 @@ class TranscriptionService {
   /// Model names: 'tiny', 'base', 'small', 'medium', 'large-v3-turbo'
   Future<bool> initialize({String model = 'base'}) async {
     try {
-      _currentModel = _mapModelName(model);
+      final mapped = _mapModelName(model);
+      if (mapped == 'unsupported') {
+        throw UnsupportedError('Whisper Large V3 and Turbo models are NOT supported by the current engine. Please use Base, Small, or Medium.');
+      }
+      _currentModel = mapped;
 
       _whisper = Whisper(
         model: _getWhisperModel(_currentModel),
@@ -70,12 +74,19 @@ class TranscriptionService {
 
   /// Map user-friendly model names to internal model names
   String _mapModelName(String model) {
-    switch (model.toLowerCase()) {
-      case 'large-v3-turbo':
-      case 'large-v3':
+    final m = model.toLowerCase();
+    
+    // Explicitly block V3/Turbo to avoid SIGILL crash
+    if (m.contains('v3') || m.contains('turbo')) {
+      return 'unsupported';
+    }
+
+    switch (m) {
       case 'large-v2':
       case 'large':
         return 'largeV2';
+      case 'large-v1':
+        return 'largeV1';
       case 'medium':
         return 'medium';
       case 'small':
@@ -94,6 +105,8 @@ class TranscriptionService {
     switch (modelName) {
       case 'largeV2':
         return WhisperModel.largeV2;
+      case 'largeV1':
+        return WhisperModel.largeV1;
       case 'medium':
         return WhisperModel.medium;
       case 'small':

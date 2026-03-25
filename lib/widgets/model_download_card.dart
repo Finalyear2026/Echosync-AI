@@ -13,6 +13,7 @@ class ModelDownloadCard extends StatelessWidget {
   final bool isZip;
   final String filename;
   final bool isOnline;
+  final String categoryId;
 
   const ModelDownloadCard({
     super.key,
@@ -24,6 +25,7 @@ class ModelDownloadCard extends StatelessWidget {
     required this.isZip,
     required this.filename,
     required this.isOnline,
+    required this.categoryId,
   });
 
   @override
@@ -35,6 +37,7 @@ class ModelDownloadCard extends StatelessWidget {
         final isDownloading = provider.isModelDownloading(modelId);
         final sizeMB = (sizeBytes / (1024 * 1024)).toStringAsFixed(1);
         final isPaused = provider.isPaused(modelId);
+        final isActive = provider.isModelActive(categoryId, modelId);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -100,12 +103,18 @@ class ModelDownloadCard extends StatelessWidget {
 
   Widget _buildActions(BuildContext context, AppProvider provider, bool isDownloaded, bool isDownloading, bool isPaused) {
     if (isDownloaded) {
+      final isActive = provider.isModelActive(categoryId, modelId);
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextButton(
-            onPressed: () => provider.useModel('category', modelId), // Logic for actual category mapping
-            child: const Text('Use', style: TextStyle(color: AppTheme.accentCyan)),
+            onPressed: isActive 
+              ? () => provider.deactivateModel(categoryId)
+              : () => provider.activateModel(categoryId, modelId),
+            child: Text(
+              isActive ? 'Activated' : 'Activate',
+              style: TextStyle(color: isActive ? AppTheme.success : AppTheme.accentCyan),
+            ),
           ),
           const SizedBox(width: 4),
           IconButton(

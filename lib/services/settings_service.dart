@@ -57,9 +57,21 @@ class SettingsService {
     await saveSettings(settings);
   }
 
-  Future<void> setWhisperModel(String model) async {
+  Future<void> updateWhisperModel(String model) async {
     final settings = getSettings();
     settings.whisperModel = model;
+    await saveSettings(settings);
+  }
+
+  Future<void> updateNLPModel(String model) async {
+    final settings = getSettings();
+    settings.nlpModel = model;
+    await saveSettings(settings);
+  }
+
+  Future<void> updateNoiseCleaningModel(String model) async {
+    final settings = getSettings();
+    settings.noiseCleaningModel = model;
     await saveSettings(settings);
   }
 
