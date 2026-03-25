@@ -19,7 +19,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<String> _highlightedCategoryIds = [];
   bool _showTooltip = false;
   final ValueNotifier<int> _shakeTrigger = ValueNotifier(0);
 
@@ -81,40 +80,50 @@ class _HomeScreenState extends State<HomeScreen> {
                             // Active models mini-display
                             _ActiveModelsDisplay(
                               provider: provider,
-                              highlightedIds: _highlightedCategoryIds,
                             ),
 
                             const SizedBox(height: 48),
 
                             // Record button
-                            Stack(
-                              alignment: Alignment.topCenter,
-                              clipBehavior: Clip.none,
-                              children: [
-                                // Custom Tooltip
-                                if (_showTooltip)
+                            SizedBox(
+                              height: 240, // Expanded height to include tooltip hit area
+                              child: Stack(
+                                alignment: Alignment.bottomCenter,
+                                clipBehavior: Clip.none,
+                                children: [
+                                  // Custom Tooltip
+                                  if (_showTooltip)
+                                    Positioned(
+                                      top: 0,
+                                      child: _RequirementTooltip(
+                                        onSetup: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (context) => const ModelsScreen(),
+                                            ),
+                                          );
+                                        },
+                                        onClose: () {
+                                          setState(() {
+                                            _showTooltip = false;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  
                                   Positioned(
-                                    top: -55,
-                                    child: _RequirementTooltip(
-                                      onSetup: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (context) => const ModelsScreen(),
-                                          ),
-                                        );
-                                      },
+                                    bottom: -20, // Center the button a bit better
+                                    child: RecordButton(
+                                      isRecording: provider.isRecording,
+                                      isProcessing: provider.isProcessing,
+                                      isEnabled: provider.areAllModelsSelected,
+                                      shakeTrigger: _shakeTrigger,
+                                      recordingDuration: provider.recordingDuration,
+                                      onTap: () => _handleRecordTap(context, provider),
                                     ),
                                   ),
-                                
-                                RecordButton(
-                                  isRecording: provider.isRecording,
-                                  isProcessing: provider.isProcessing,
-                                  isEnabled: provider.areAllModelsSelected,
-                                  shakeTrigger: _shakeTrigger,
-                                  recordingDuration: provider.recordingDuration,
-                                  onTap: () => _handleRecordTap(context, provider),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
 
                             const SizedBox(height: 32),
@@ -251,22 +260,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // NEW: Check if all categories have an active model
     if (!provider.areAllModelsSelected) {
-      final missingIds = provider.getMissingCategoryIds();
       setState(() {
-        _highlightedCategoryIds = missingIds;
         _showTooltip = true;
       });
       _shakeTrigger.value++;
-      
-      // Reset highlight and tooltip after 3 seconds
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) {
-          setState(() {
-            _highlightedCategoryIds = [];
-            _showTooltip = false;
-          });
-        }
-      });
       return;
     }
 
@@ -584,11 +581,9 @@ class _NewRecordingButton extends StatelessWidget {
 
 class _ActiveModelsDisplay extends StatelessWidget {
   final AppProvider provider;
-  final List<String> highlightedIds;
 
   const _ActiveModelsDisplay({
     required this.provider,
-    this.highlightedIds = const [],
   });
 
   @override
@@ -620,7 +615,6 @@ class _ActiveModelsDisplay extends StatelessWidget {
               final categoryName = category['name'] as String;
               final activeId = provider.activeModels[categoryId];
               final isNone = activeId == null || activeId.isEmpty;
-              final isHighlighted = highlightedIds.contains(categoryId);
               
               String modelName = isNone ? 'Empty Slot' : 'Unknown';
               if (!isNone) {
@@ -690,7 +684,7 @@ class _ActiveModelsDisplay extends StatelessWidget {
                 ),
               );
 
-              if (isHighlighted) {
+              if (isNone) {
                 return _BreathingHighlight(child: chip);
               }
 
@@ -774,8 +768,12 @@ class _BreathingHighlightState extends State<_BreathingHighlight>
 
 class _RequirementTooltip extends StatelessWidget {
   final VoidCallback onSetup;
+  final VoidCallback onClose;
 
-  const _RequirementTooltip({required this.onSetup});
+  const _RequirementTooltip({
+    required this.onSetup,
+    required this.onClose,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -794,7 +792,7 @@ class _RequirementTooltip extends StatelessWidget {
         );
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
@@ -814,6 +812,7 @@ class _RequirementTooltip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const SizedBox(width: 4),
             const Icon(Icons.info_outline_rounded, size: 14, color: Colors.white),
             const SizedBox(width: 8),
             const Text(
@@ -827,8 +826,9 @@ class _RequirementTooltip extends StatelessWidget {
             const SizedBox(width: 12),
             GestureDetector(
               onTap: onSetup,
+              behavior: HitTestBehavior.opaque,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
@@ -840,6 +840,19 @@ class _RequirementTooltip extends StatelessWidget {
                     fontSize: 10,
                     fontWeight: FontWeight.w900,
                   ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onClose,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: Colors.white70,
                 ),
               ),
             ),
