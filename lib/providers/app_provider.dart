@@ -160,6 +160,32 @@ class AppProvider extends ChangeNotifier {
     return _activeModels[categoryId] == modelId;
   }
 
+  /// Check if every category has a model selected
+  bool get areAllModelsSelected {
+    if (_cloudCategories.isEmpty) return false;
+    for (final category in _cloudCategories) {
+      final categoryId = category['id'] as String;
+      final activeId = _activeModels[categoryId];
+      if (activeId == null || activeId.isEmpty) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Get IDs of categories that don't have a model selected
+  List<String> getMissingCategoryIds() {
+    final List<String> missing = [];
+    for (final category in _cloudCategories) {
+      final categoryId = category['id'] as String;
+      final activeId = _activeModels[categoryId];
+      if (activeId == null || activeId.isEmpty) {
+        missing.add(categoryId);
+      }
+    }
+    return missing;
+  }
+
   AppSettings get appSettings =>
       _isInitialized ? _settings.getSettings() : AppSettings();
   List<DictionaryEntry> get dictionary =>

@@ -5,6 +5,8 @@ import '../theme/app_theme.dart';
 class RecordButton extends StatefulWidget {
   final bool isRecording;
   final bool isProcessing;
+  final bool isEnabled;
+  final ValueNotifier<int>? shakeTrigger;
   final VoidCallback onTap;
   final Duration recordingDuration;
 
@@ -12,6 +14,8 @@ class RecordButton extends StatefulWidget {
     super.key,
     required this.isRecording,
     required this.isProcessing,
+    this.isEnabled = true,
+    this.shakeTrigger,
     required this.onTap,
     this.recordingDuration = Duration.zero,
   });
@@ -24,12 +28,15 @@ class _RecordButtonState extends State<RecordButton>
     with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late AnimationController _rippleController;
+  late AnimationController _shakeController;
   late Animation<double> _pulseAnimation;
   late Animation<double> _rippleAnimation;
+  late Animation<double> _shakeOffset;
 
   @override
   void initState() {
     super.initState();
+    widget.shakeTrigger?.addListener(_handleShakeTrigger);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -45,6 +52,18 @@ class _RecordButtonState extends State<RecordButton>
     _rippleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _rippleController, curve: Curves.easeOut),
     );
+
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _shakeOffset = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 10.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 10.0, end: -10.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -10.0, end: 10.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 10.0, end: -10.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -10.0, end: 0.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut));
   }
 
   @override
@@ -59,12 +78,29 @@ class _RecordButtonState extends State<RecordButton>
       _rippleController.stop();
       _rippleController.reset();
     }
+
+    // Trigger shake if tapped while disabled
+    if (!widget.isEnabled && oldWidget.isEnabled == false) {
+       // We can't easily detect a click here without a separate trigger, 
+       // but I'll add a 'shakeKey' or similar to the widget if needed.
+       // For now, I'll rely on the parent calling a method via GlobalKey.
+    }
+  }
+
+  void shake() {
+    _shakeController.forward(from: 0.0);
+  }
+
+  void _handleShakeTrigger() {
+    shake();
   }
 
   @override
   void dispose() {
+    widget.shakeTrigger?.removeListener(_handleShakeTrigger);
     _pulseController.dispose();
     _rippleController.dispose();
+    _shakeController.dispose();
     super.dispose();
   }
 
@@ -147,13 +183,16 @@ class _RecordButtonState extends State<RecordButton>
 
               // Main button
               AnimatedBuilder(
-                animation: _pulseAnimation,
+                animation: Listenable.merge([_pulseAnimation, _shakeController]),
                 builder: (context, child) {
                   final scale =
                       widget.isRecording ? _pulseAnimation.value : 1.0;
-                  return Transform.scale(
-                    scale: scale,
-                    child: child,
+                  return Transform.translate(
+                    offset: Offset(_shakeOffset.value, 0),
+                    child: Transform.scale(
+                      scale: scale,
+                      child: child,
+                    ),
                   );
                 },
                 child: GestureDetector(
@@ -163,53 +202,71 @@ class _RecordButtonState extends State<RecordButton>
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      gradient: widget.isRecording
-                          ? AppTheme.recordingGradient
-                          : widget.isProcessing
-                              ? const LinearGradient(
-                                  colors: [
-                                    AppTheme.textMuted,
-                                    AppTheme.textMuted
-                                  ],
-                                )
-                              : AppTheme.recordButtonGradient,
+                      gradient: !widget.isEnabled 
+                          ? LinearGradient(
+                              colors: [
+                                Colors.white.withOpacity(0.05),
+                                Colors.white.withOpacity(0.02)
+                              ],
+                            )
+                          : widget.isRecording
+                              ? AppTheme.recordingGradient
+                              : widget.isProcessing
+                                  ? const LinearGradient(
+                                      colors: [
+                                        AppTheme.textMuted,
+                                        AppTheme.textMuted
+                                      ],
+                                    )
+                                  : AppTheme.recordButtonGradient,
                       shape: BoxShape.circle,
+                      border: !widget.isEnabled 
+                          ? Border.all(color: Colors.white.withOpacity(0.05), width: 1.5)
+                          : null,
                       boxShadow: [
-                        BoxShadow(
-                          color: (widget.isRecording
-                                  ? AppTheme.recording
-                                  : AppTheme.primaryPurple)
-                              .withOpacity(0.4),
-                          blurRadius: 30,
-                          spreadRadius: 5,
-                        ),
+                        if (widget.isEnabled)
+                          BoxShadow(
+                            color: (widget.isRecording
+                                    ? AppTheme.recording
+                                    : AppTheme.primaryPurple)
+                                .withOpacity(0.4),
+                            blurRadius: 30,
+                            spreadRadius: 5,
+                          ),
                       ],
                     ),
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
-                      child: widget.isRecording
-                          ? const Icon(
-                              Icons.stop_rounded,
-                              key: ValueKey('stop'),
-                              color: Colors.white,
+                      child: !widget.isEnabled 
+                          ? Icon(
+                              Icons.mic_off_rounded,
+                              key: const ValueKey('mic_disabled'),
+                              color: Colors.white.withOpacity(0.15),
                               size: 44,
                             )
-                          : widget.isProcessing
-                              ? const SizedBox(
-                                  key: ValueKey('processing'),
-                                  width: 32,
-                                  height: 32,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 3,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.mic_rounded,
-                                  key: ValueKey('mic'),
+                          : widget.isRecording
+                              ? const Icon(
+                                  Icons.stop_rounded,
+                                  key: ValueKey('stop'),
                                   color: Colors.white,
                                   size: 44,
-                                ),
+                                )
+                              : widget.isProcessing
+                                  ? const SizedBox(
+                                      key: ValueKey('processing'),
+                                      width: 32,
+                                      height: 32,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 3,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.mic_rounded,
+                                      key: ValueKey('mic'),
+                                      color: Colors.white,
+                                      size: 44,
+                                    ),
                     ),
                   ),
                 ),
@@ -223,20 +280,26 @@ class _RecordButtonState extends State<RecordButton>
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: Text(
-            widget.isRecording
-                ? 'Tap to stop recording'
-                : widget.isProcessing
-                    ? 'Processing...'
-                    : 'Tap to start recording',
-            key: ValueKey(widget.isRecording
-                ? 'recording'
-                : widget.isProcessing
-                    ? 'processing'
-                    : 'idle'),
+            !widget.isEnabled 
+                ? 'Select all models to record'
+                : widget.isRecording
+                    ? 'Tap to stop recording'
+                    : widget.isProcessing
+                        ? 'Processing...'
+                        : 'Tap to start recording',
+            key: ValueKey(!widget.isEnabled 
+                ? 'disabled'
+                : widget.isRecording
+                    ? 'recording'
+                    : widget.isProcessing
+                        ? 'processing'
+                        : 'idle'),
             style: TextStyle(
-              color: widget.isRecording
-                  ? AppTheme.recording
-                  : AppTheme.textSecondary,
+              color: !widget.isEnabled 
+                  ? AppTheme.textMuted.withOpacity(0.5)
+                  : widget.isRecording
+                      ? AppTheme.recording
+                      : AppTheme.textSecondary,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
