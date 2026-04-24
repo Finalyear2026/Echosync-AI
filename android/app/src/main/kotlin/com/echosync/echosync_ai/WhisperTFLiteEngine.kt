@@ -30,7 +30,8 @@ class WhisperTFLiteEngine(private val context: Context) {
         private const val TAG = "WhisperEngine"
 
         const val SAMPLE_RATE   = 16_000
-        const val N_FFT         = 400        // 25 ms window
+        const val WINDOW_SIZE   = 400        // 25 ms window
+        const val N_FFT         = 512        // FFT size (power of 2)
         const val HOP_LENGTH    = 160        // 10 ms hop
         const val N_MELS        = 80
         const val N_FRAMES      = 3_000     // 30 s * 100 frames/s
@@ -212,7 +213,7 @@ class WhisperTFLiteEngine(private val context: Context) {
      */
     private fun computeLogMelSpectrogram(pcm: FloatArray): Array<FloatArray> {
         // Pad to ensure we produce exactly N_FRAMES
-        val paddedLen = (N_FRAMES - 1) * HOP_LENGTH + N_FFT
+        val paddedLen = (N_FRAMES - 1) * HOP_LENGTH + WINDOW_SIZE
         val padded = FloatArray(paddedLen)
         pcm.copyInto(padded, 0, 0, minOf(pcm.size, paddedLen))
 
@@ -224,9 +225,13 @@ class WhisperTFLiteEngine(private val context: Context) {
         for (frame in 0 until N_FRAMES) {
             val start = frame * HOP_LENGTH
 
-            // Apply Hann window
+            // Apply Hann window and pad to N_FFT
             for (n in 0 until N_FFT) {
-                re[n] = if (start + n < paddedLen) (padded[start + n] * hannWindow[n]).toDouble() else 0.0
+                if (n < WINDOW_SIZE && (start + n) < paddedLen) {
+                    re[n] = (padded[start + n] * hannWindow[n]).toDouble()
+                } else {
+                    re[n] = 0.0
+                }
                 im[n] = 0.0
             }
 
@@ -264,9 +269,9 @@ class WhisperTFLiteEngine(private val context: Context) {
         return logMel
     }
 
-    /** Build the Hann window of length N_FFT. */
+    /** Build the Hann window of length WINDOW_SIZE. */
     private fun buildHannWindow(): FloatArray =
-        FloatArray(N_FFT) { n -> (0.5 * (1.0 - cos(2.0 * PI * n / N_FFT))).toFloat() }
+        FloatArray(WINDOW_SIZE) { n -> (0.5 * (1.0 - cos(2.0 * PI * n / WINDOW_SIZE))).toFloat() }
 
     /**
      * Build the mel filterbank matrix [N_MELS × (N_FFT/2 + 1)].
