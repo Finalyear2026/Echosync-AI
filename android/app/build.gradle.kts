@@ -45,6 +45,12 @@ android {
 
 dependencies {
     implementation("io.github.kaleyravideo:android-deepfilternet:0.0.8")
+    
+    // TensorFlow Lite for DTLN and Whisper TFLite
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    // Support for flexible operators if needed by complex models
+    implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 }
 
 flutter {

@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 
-import 'models/dictionary_entry.dart';
-import 'models/snippet.dart';
-import 'providers/app_provider.dart';
-import 'services/audio_recorder_service.dart';
-import 'services/noise_filter_service.dart';
-import 'services/transcription_service.dart';
-import 'services/llm_service.dart';
-import 'services/model_manager_service.dart';
-import 'services/settings_service.dart';
-import 'services/pipeline_service.dart';
-import 'screens/home_screen.dart';
-import 'theme/app_theme.dart';
+import 'package:echosync_ai/models/dictionary_entry.dart';
+import 'package:echosync_ai/models/snippet.dart';
+import 'package:echosync_ai/providers/app_provider.dart';
+import 'package:echosync_ai/services/audio_recorder_service.dart';
+import 'package:echosync_ai/services/noise_filter_service.dart';
+import 'package:echosync_ai/services/transcription_service.dart';
+import 'package:echosync_ai/services/llm_service.dart';
+import 'package:echosync_ai/services/model_manager_service.dart';
+import 'package:echosync_ai/services/settings_service.dart';
+import 'package:echosync_ai/services/pipeline_service.dart';
+import 'package:echosync_ai/screens/home_screen.dart';
+import 'package:echosync_ai/theme/app_theme.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,21 +30,16 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  // Initialize Hive in External Storage for visibility
-  final extDir = await getExternalStorageDirectory();
-  final internalDir = await getApplicationDocumentsDirectory();
-  final hivePath = (extDir ?? internalDir).path;
-  
-  Hive.init(hivePath);
-  Hive.registerAdapter(DictionaryEntryAdapter());
-  Hive.registerAdapter(SnippetAdapter());
+  // Settings service initialize (finds path)
+  final settings = SettingsService();
+  await settings.initialize();
+
 
   // Request permissions
   await _requestPermissions();
 
   // Initialize services
-  final settings = SettingsService();
-  await settings.initialize();
+
   
   final audioRecorder = AudioRecorderService();
   final noiseFilter = NoiseFilterService();

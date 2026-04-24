@@ -8,8 +8,11 @@ import '../models/processing_state.dart';
 class LlmService {
   FlutterLlama? _llama;
   bool _isModelLoaded = false;
+  String? _loadedModelPath;
 
   bool get isModelLoaded => _isModelLoaded;
+  String? get loadedModelPath => _loadedModelPath;
+
 
   /// Initialize and load the LLM model
   Future<bool> loadModel(String modelPath) async {
@@ -28,11 +31,13 @@ class LlmService {
 
       final success = await _llama!.loadModel(config);
       _isModelLoaded = success;
+      _loadedModelPath = success ? modelPath : null;
       debugPrint('LLM: Model loaded=$success from $modelPath');
       return success;
     } catch (e) {
       debugPrint('LLM: Model load error: $e');
       _isModelLoaded = false;
+      _loadedModelPath = null;
       return false;
     }
   }

@@ -1,20 +1,10 @@
-import 'package:hive/hive.dart';
+class Snippet {
 
-part 'snippet.g.dart';
-
-@HiveType(typeId: 1)
-class Snippet extends HiveObject {
-  @HiveField(0)
   String id;
-
-  @HiveField(1)
   String triggerPhrase;
-
-  @HiveField(2)
   String templateContent;
-
-  @HiveField(3)
   String? description;
+
 
   Snippet({
     required this.id,

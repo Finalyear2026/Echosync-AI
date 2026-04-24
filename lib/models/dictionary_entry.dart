@@ -1,17 +1,9 @@
-import 'package:hive/hive.dart';
+class DictionaryEntry {
 
-part 'dictionary_entry.g.dart';
-
-@HiveType(typeId: 0)
-class DictionaryEntry extends HiveObject {
-  @HiveField(0)
   String id;
-
-  @HiveField(1)
   String misheardWord;
-
-  @HiveField(2)
   String correctWord;
+
 
   DictionaryEntry({
     required this.id,

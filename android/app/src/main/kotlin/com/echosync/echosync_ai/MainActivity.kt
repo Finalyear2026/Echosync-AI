@@ -5,18 +5,18 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val DEEP_FILTER_CHANNEL = "com.echosync.ai/deepfilternet"
-    private var deepFilterPlugin: DeepFilterNetPlugin? = null
+    private val AI_CORE_CHANNEL = "com.echosync.ai/deepfilternet" // Keeping channel ID for compatibility
+    private var aiProcessorPlugin: AiProcessorPlugin? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        deepFilterPlugin = DeepFilterNetPlugin(this)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEEP_FILTER_CHANNEL)
-            .setMethodCallHandler(deepFilterPlugin)
+        aiProcessorPlugin = AiProcessorPlugin(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, AI_CORE_CHANNEL)
+            .setMethodCallHandler(aiProcessorPlugin)
     }
 
     override fun onDestroy() {
-        deepFilterPlugin?.dispose()
+        aiProcessorPlugin?.dispose()
         super.onDestroy()
     }
 }

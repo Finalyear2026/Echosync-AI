@@ -1,18 +1,45 @@
 {
-  "version": "1.0.0",
+  "version": "1.2.0",
   "categories": [
     {
       "id": "noise_cleaning",
       "name": "Noise Cleaning Models",
       "models": [
         {
-          "id": "deepfilternet_3",
+          "id": "dtln_quantized",
+          "name": "DTLN (Quantized)",
+          "description": "Lightweight noise cleaning model (TFLite)",
+          "filename": "DTLN-Quantized.zip",
+          "is_zip": true,
+          "size_bytes": 725853,
+          "drive_id": "1NlHIQ7-vW6rbWMrPfLMbz-ipxoyUrZ9p"
+        },
+        {
+          "id": "dtln",
+          "name": "DTLN",
+          "description": "Standard DTLN noise cleaning model (TFLite)",
+          "filename": "DTLN.zip",
+          "is_zip": true,
+          "size_bytes": 3686536,
+          "drive_id": "1NBxDje5KKhwtiMhyJBUk3AstmAYydh82"
+        },
+        {
+          "id": "deepfilternet2",
+          "name": "DeepFilterNet 2",
+          "description": "High-quality deep filtering noise cleaning (ONNX)",
+          "filename": "DeepFilterNet2.zip",
+          "is_zip": true,
+          "size_bytes": 8620353,
+          "drive_id": "1sLGxaRFk1wyMkDmA8nzKaUwyOTXtqRrB"
+        },
+        {
+          "id": "deepfilternet3",
           "name": "DeepFilterNet 3",
-          "description": "Premium noise suppression (Zipped package)",
+          "description": "Latest deep filtering noise cleaning model (ONNX)",
           "filename": "DeepFilterNet3.zip",
           "is_zip": true,
-          "size_bytes": 7986207,
-          "drive_id": "1vNAj0qgaslaEnAS9fCMFDvNnxvRXWj2l"
+          "size_bytes": 7976006,
+          "drive_id": "1EwsJ8JHSL9cHsQWNQj4QCOWr2YQSTAVb"
         }
       ]
     },
@@ -23,38 +50,38 @@
         {
           "id": "whisper_base",
           "name": "Whisper Base",
-          "description": "Fast & Lightweight",
-          "filename": "whisper_base.zip",
+          "description": "Fast and lightweight STT model (TFLite)",
+          "filename": "whisper-base.zip",
           "is_zip": true,
-          "size_bytes": 133064207,
-          "drive_id": "1ZX96uLsAL7gItt3XqGSnlGuZa043HLbQ"
+          "size_bytes": 50589771,
+          "drive_id": "11SuE5ibZuRLBZN_JWbU0tAAT4MRF0Kc_"
         },
         {
           "id": "whisper_small",
           "name": "Whisper Small",
-          "description": "Balanced",
-          "filename": "whisper_small.zip",
+          "description": "Balanced accuracy and speed (TFLite)",
+          "filename": "whisper-small.zip",
           "is_zip": true,
-          "size_bytes": 446077769,
-          "drive_id": "12Ym9Pgg4549WaRP5yH6luspWsvLlUgx8"
+          "size_bytes": 163043705,
+          "drive_id": "1rdf_oy3yCBTfeSND1xGBn-5TnOX3HMG1"
         },
         {
           "id": "whisper_medium",
           "name": "Whisper Medium",
-          "description": "High Accuracy",
-          "filename": "whisper_medium.zip",
+          "description": "High accuracy STT model (TFLite)",
+          "filename": "whisper-medium.zip",
           "is_zip": true,
-          "size_bytes": 1412421232,
-          "drive_id": "1yVNRhzX7Y2C1RUeDFAZ4luew2SojG2ZF"
+          "size_bytes": 506520834,
+          "drive_id": "1YCMIMIB-Rk3YjmIJujovDKii0kXgw8PY"
         },
         {
-          "id": "whisper_large_turbo",
-          "name": "Whisper Large Turbo V3",
-          "description": "Best English & Urdu Support",
-          "filename": "whisper_large_turbo_v3.zip",
+          "id": "whisper_large_v3_turbo",
+          "name": "Whisper Large V3 Turbo",
+          "description": "Ultra-high performance STT model (TFLite)",
+          "filename": "whisper-large-v3-turbo.zip",
           "is_zip": true,
-          "size_bytes": 1492498810,
-          "drive_id": "1gVwj3tdkyDwI7cVc32UuZYnzJKw8f2Gq"
+          "size_bytes": 673265560,
+          "drive_id": "1cl1ZS_qBeSBcnoRX7ZTf_F5jT80CCwOk"
         }
       ]
     },
@@ -63,15 +90,43 @@
       "name": "AI Text Engines (NLP)",
       "models": [
         {
-          "id": "qwen_2_5_1_5b",
-          "name": "Qwen 2.5 1.5B Instruct",
-          "description": "Smart Formatting & Grammar",
-          "filename": "qwen2_5__1_5b_instruct_q4_k_m.zip",
+          "id": "qwen2_5_0_5b",
+          "name": "Qwen 2.5 0.5B Instruct",
+          "description": "Compact and capable language model (GGUF)",
+          "filename": "qwen2.5-0.5b-instruct-q4_k_m.zip",
           "is_zip": true,
-          "size_bytes": 1091276760,
-          "drive_id": "1cio3CosE2xwv6z9XhsSuHS6f43Zo55oB"
+          "size_bytes": 476933707,
+          "drive_id": "1lTYJTMbyUgifEGaFvZL2GuwyXD5AzfOw"
+        },
+        {
+          "id": "llama_3_2_1b",
+          "name": "Llama 3.2 1B Instruct",
+          "description": "Meta's lightweight open-source model (GGUF)",
+          "filename": "Llama-3.2-1B-Instruct-Q4_K_M.zip",
+          "is_zip": true,
+          "size_bytes": 789191413,
+          "drive_id": "1x7y_0mAwqV_GHlxYhAnaPJHF5zQSddZH"
+        },
+        {
+          "id": "qwen2_5_1_5b",
+          "name": "Qwen 2.5 1.5B Instruct",
+          "description": "Balanced performance language model (GGUF)",
+          "filename": "qwen2.5-1.5b-instruct-q4_k_m.zip",
+          "is_zip": true,
+          "size_bytes": 1091133816,
+          "drive_id": "1Gc4N2eyrWzcknbeOu8sNE7mypFrWYxVo"
+        },
+        {
+          "id": "llama_3_2_3b",
+          "name": "Llama 3.2 3B Instruct",
+          "description": "Smart and powerful language model (GGUF)",
+          "filename": "Llama-3.2-3B-Instruct-Q4_K_M.zip",
+          "is_zip": true,
+          "size_bytes": 1981437594,
+          "drive_id": "1Ac1m8Ui6bUjpbiTSJ8Biw_kZLKqAwz_7"
         }
       ]
     }
   ]
 }
+

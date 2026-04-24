@@ -1,48 +1,103 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:path/path.dart' as p;
 import '../models/app_settings.dart';
 import '../models/dictionary_entry.dart';
 import '../models/snippet.dart';
 import '../models/processing_state.dart';
 
 /// Service for managing app settings, personal dictionary, and snippet library.
-/// Uses Hive for local persistence.
+/// Uses Pretty-Printed JSON text files for local persistence.
 class SettingsService {
-  static const _settingsBoxName = 'settings';
-  static const _dictionaryBoxName = 'dictionary';
-  static const _snippetsBoxName = 'snippets';
+  static const _encoder = JsonEncoder.withIndent('  ');
+  static const _settingsFileName = 'settings.json';
+  static const _dictionaryFileName = 'dictionary.json';
+  static const _snippetsFileName = 'snippets.json';
 
-  late Box _settingsBox;
-  late Box<DictionaryEntry> _dictionaryBox;
-  late Box<Snippet> _snippetsBox;
+  String? _basePath;
   final _uuid = const Uuid();
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
-  /// Initialize Hive boxes
+  /// Initialize file paths
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    _settingsBox = await Hive.openBox(_settingsBoxName);
-    _dictionaryBox = await Hive.openBox<DictionaryEntry>(_dictionaryBoxName);
-    _snippetsBox = await Hive.openBox<Snippet>(_snippetsBoxName);
+    final extDir = await getExternalStorageDirectory();
+    final internalDir = await getApplicationDocumentsDirectory();
+    _basePath = (extDir ?? internalDir).path;
+
     _isInitialized = true;
-    debugPrint('Settings: Initialized. Dictionary=${_dictionaryBox.length}, '
-        'Snippets=${_snippetsBox.length}');
+    debugPrint('Settings: Initialized in $_basePath');
+    
+    // Cleanup legacy files on background
+    _cleanupLegacyFiles();
+  }
+
+  Future<void> _cleanupLegacyFiles() async {
+    try {
+      final legacyFiles = [
+        'settings.hive',
+        'settings.hive.lock',
+        'dictionary.hive',
+        'dictionary.hive.lock',
+        'snippets.hive',
+        'snippets.hive.lock',
+      ];
+
+      for (final fileName in legacyFiles) {
+        final file = _getFile(fileName);
+        if (file.existsSync()) {
+          await file.delete();
+          debugPrint('Settings: Deleted legacy file $fileName');
+        }
+      }
+
+      // Also cleanup any .json.part files that might be stuck
+      final dir = Directory(_basePath!);
+      final files = dir.listSync();
+      for (final f in files) {
+        if (f is File && f.path.endsWith('.part')) {
+           await f.delete();
+        }
+      }
+    } catch (e) {
+      debugPrint('Settings: Cleanup error: $e');
+    }
+  }
+
+  File _getFile(String fileName) {
+    return File(p.join(_basePath!, fileName));
   }
 
   // --- App Settings ---
 
   AppSettings getSettings() {
-    final json = _settingsBox.get('appSettings');
-    if (json == null) return AppSettings();
-    return AppSettings.fromJson(Map<String, dynamic>.from(json as Map));
+    try {
+      final file = _getFile(_settingsFileName);
+      if (!file.existsSync()) return AppSettings();
+      
+      final content = file.readAsStringSync();
+      final json = jsonDecode(content);
+      return AppSettings.fromJson(Map<String, dynamic>.from(json as Map));
+    } catch (e) {
+      debugPrint('Settings: Error reading settings: $e');
+      return AppSettings();
+    }
   }
 
   Future<void> saveSettings(AppSettings settings) async {
-    await _settingsBox.put('appSettings', settings.toJson());
+    try {
+      final file = _getFile(_settingsFileName);
+      await file.writeAsString(_encoder.convert(settings.toJson()));
+      debugPrint('Settings: Saved to $_settingsFileName');
+    } catch (e) {
+      debugPrint('Settings: Error saving settings: $e');
+    }
   }
 
   Future<void> setTranscriptionStyle(TranscriptionStyle style) async {
@@ -84,26 +139,59 @@ class SettingsService {
   // --- Model Registry Sync ---
 
   String? getRegistryEtag() {
-    return _settingsBox.get('registryEtag') as String?;
+    try {
+      final file = _getFile('registry_etag.txt');
+      if (!file.existsSync()) return null;
+      return file.readAsStringSync();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> setRegistryEtag(String etag) async {
-    await _settingsBox.put('registryEtag', etag);
+    try {
+      final file = _getFile('registry_etag.txt');
+      await file.writeAsString(etag);
+    } catch (_) {}
   }
 
   // --- Personal Dictionary ---
 
   List<DictionaryEntry> getDictionary() {
-    return _dictionaryBox.values.toList();
+    try {
+      final file = _getFile(_dictionaryFileName);
+      if (!file.existsSync()) return [];
+      
+      final content = file.readAsStringSync();
+      final List<dynamic> jsonList = jsonDecode(content);
+      return jsonList
+          .map((e) => DictionaryEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (e) {
+      debugPrint('Settings: Error reading dictionary: $e');
+      return [];
+    }
+  }
+
+  Future<void> _saveDictionary(List<DictionaryEntry> entries) async {
+    try {
+      final file = _getFile(_dictionaryFileName);
+      final jsonList = entries.map((e) => e.toJson()).toList();
+      await file.writeAsString(_encoder.convert(jsonList));
+    } catch (e) {
+      debugPrint('Settings: Error saving dictionary: $e');
+    }
   }
 
   Future<void> addDictionaryEntry(String misheardWord, String correctWord) async {
+    final entries = getDictionary();
     final entry = DictionaryEntry(
       id: _uuid.v4(),
       misheardWord: misheardWord,
       correctWord: correctWord,
     );
-    await _dictionaryBox.put(entry.id, entry);
+    entries.add(entry);
+    await _saveDictionary(entries);
   }
 
   Future<void> updateDictionaryEntry(
@@ -111,21 +199,23 @@ class SettingsService {
     String misheardWord,
     String correctWord,
   ) async {
-    final entry = _dictionaryBox.get(id);
-    if (entry != null) {
-      entry.misheardWord = misheardWord;
-      entry.correctWord = correctWord;
-      await entry.save();
+    final entries = getDictionary();
+    final index = entries.indexWhere((e) => e.id == id);
+    if (index != -1) {
+      entries[index].misheardWord = misheardWord;
+      entries[index].correctWord = correctWord;
+      await _saveDictionary(entries);
     }
   }
 
   Future<void> deleteDictionaryEntry(String id) async {
-    await _dictionaryBox.delete(id);
+    final entries = getDictionary();
+    entries.removeWhere((e) => e.id == id);
+    await _saveDictionary(entries);
   }
 
-  /// Get dictionary as list of maps for LLM prompt
   List<Map<String, String>> getDictionaryForPrompt() {
-    return _dictionaryBox.values
+    return getDictionary()
         .map((e) => {'misheard': e.misheardWord, 'correct': e.correctWord})
         .toList();
   }
@@ -133,7 +223,29 @@ class SettingsService {
   // --- Snippet Library ---
 
   List<Snippet> getSnippets() {
-    return _snippetsBox.values.toList();
+    try {
+      final file = _getFile(_snippetsFileName);
+      if (!file.existsSync()) return [];
+      
+      final content = file.readAsStringSync();
+      final List<dynamic> jsonList = jsonDecode(content);
+      return jsonList
+          .map((e) => Snippet.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (e) {
+      debugPrint('Settings: Error reading snippets: $e');
+      return [];
+    }
+  }
+
+  Future<void> _saveSnippets(List<Snippet> snippets) async {
+    try {
+      final file = _getFile(_snippetsFileName);
+      final jsonList = snippets.map((e) => e.toJson()).toList();
+      await file.writeAsString(_encoder.convert(jsonList));
+    } catch (e) {
+      debugPrint('Settings: Error saving snippets: $e');
+    }
   }
 
   Future<void> addSnippet(
@@ -141,13 +253,15 @@ class SettingsService {
     String templateContent, {
     String? description,
   }) async {
+    final snippets = getSnippets();
     final snippet = Snippet(
       id: _uuid.v4(),
       triggerPhrase: triggerPhrase,
       templateContent: templateContent,
       description: description,
     );
-    await _snippetsBox.put(snippet.id, snippet);
+    snippets.add(snippet);
+    await _saveSnippets(snippets);
   }
 
   Future<void> updateSnippet(
@@ -156,29 +270,29 @@ class SettingsService {
     String templateContent, {
     String? description,
   }) async {
-    final snippet = _snippetsBox.get(id);
-    if (snippet != null) {
-      snippet.triggerPhrase = triggerPhrase;
-      snippet.templateContent = templateContent;
-      snippet.description = description;
-      await snippet.save();
+    final snippets = getSnippets();
+    final index = snippets.indexWhere((s) => s.id == id);
+    if (index != -1) {
+      snippets[index].triggerPhrase = triggerPhrase;
+      snippets[index].templateContent = templateContent;
+      snippets[index].description = description;
+      await _saveSnippets(snippets);
     }
   }
 
   Future<void> deleteSnippet(String id) async {
-    await _snippetsBox.delete(id);
+    final snippets = getSnippets();
+    snippets.removeWhere((s) => s.id == id);
+    await _saveSnippets(snippets);
   }
 
-  /// Get snippets as list of maps for LLM prompt
   List<Map<String, String>> getSnippetsForPrompt() {
-    return _snippetsBox.values
+    return getSnippets()
         .map((s) => {'trigger': s.triggerPhrase, 'template': s.templateContent})
         .toList();
   }
 
   Future<void> dispose() async {
-    await _settingsBox.close();
-    await _dictionaryBox.close();
-    await _snippetsBox.close();
+    // No-op for JSON files
   }
 }

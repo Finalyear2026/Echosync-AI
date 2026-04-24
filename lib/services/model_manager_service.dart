@@ -9,12 +9,19 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'logging_service.dart';
 import 'settings_service.dart';
 
+/// Layout style of the model on disk
+enum ModelLayout { folder, singleFile }
+
+/// Technical format of the model
+enum ModelFormat { onnx, tflite, gguf, ggml }
+
 /// Manages downloading and storage of AI model files.
 /// Supports resumable downloads with progress tracking.
 class ModelManagerService {
   final Dio _dio = Dio();
   final Map<String, double> _downloadProgress = {};
   final Map<String, CancelToken> _cancelTokens = {};
+  Map<String, dynamic>? _cachedRegistry;
 
   static const String registryUrl = 'https://raw.githubusercontent.com/ahmadali8186105/echosync_ai_registry/refs/heads/main/models.json';
   
@@ -46,11 +53,47 @@ class ModelManagerService {
     final file = await _localRegistryFile;
     try {
       final content = await file.readAsString();
-      return jsonDecode(content) as Map<String, dynamic>;
+      final registry = jsonDecode(content) as Map<String, dynamic>;
+      _cachedRegistry = registry; // Cache it
+      return registry;
     } catch (e) {
       LoggingService().log('Failed to read local registry', category: 'MODELS_ERROR', details: {'error': e.toString()});
       return {'categories': []}; // Fallback
     }
+  }
+
+  /// Get the registry, from cache if available
+  Future<Map<String, dynamic>> _getRegistry() async {
+    if (_cachedRegistry != null) return _cachedRegistry!;
+    return await loadLocalRegistry();
+  }
+
+  /// Resolve model metadata from static map or dynamic registry
+  Future<Map<String, dynamic>?> _getModelMetadata(String modelId) async {
+    // 1. Check static models first
+    if (models.containsKey(modelId)) {
+      final info = models[modelId]!;
+      return {
+        'id': modelId,
+        'name': info.name,
+        'filename': info.filename,
+        'size_bytes': info.sizeBytes,
+        'is_zip': info.filename.endsWith('.zip'),
+      };
+    }
+
+    // 2. Check dynamic registry
+    final registry = await _getRegistry();
+    final categories = registry['categories'] as List? ?? [];
+    for (final category in categories) {
+      final modelsList = category['models'] as List? ?? [];
+      for (final m in modelsList) {
+        if (m['id'] == modelId) {
+          return m as Map<String, dynamic>;
+        }
+      }
+    }
+    return null;
   }
 
   /// Fetch the cloud registry with ETag support and atomic updates
@@ -85,7 +128,7 @@ class ModelManagerService {
         
         String content;
         if (data is Map) {
-          content = jsonEncode(data);
+          content = const JsonEncoder.withIndent('  ').convert(data);
         } else {
           content = data.toString();
         }
@@ -119,44 +162,26 @@ class ModelManagerService {
   String _getDriveDownloadUrl(String fileId) => 
       'https://drive.google.com/uc?export=download&id=$fileId';
 
-  /// Model definitions (Static fallbacks matching models.json IDs)
-  static const Map<String, ModelInfo> models = {
-    'whisper_base': ModelInfo(
-      name: 'Whisper Base',
-      filename: 'whisper_base.zip',
-      url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-      sizeBytes: 133064207,
-      description: 'Fast, lightweight speech-to-text (~150MB)',
-    ),
-    'whisper_small': ModelInfo(
-      name: 'Whisper Small',
-      filename: 'whisper_small.zip',
-      url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
-      sizeBytes: 446077769,
-      description: 'Balanced accuracy and speed (~250MB)',
-    ),
-    'whisper_medium': ModelInfo(
-      name: 'Whisper Medium',
-      filename: 'whisper_medium.zip',
-      url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
-      sizeBytes: 1412421232,
-      description: 'High accuracy speech-to-text (~1.4GB)',
-    ),
-    'whisper_large_turbo': ModelInfo(
-      name: 'Whisper Large Turbo V3',
-      filename: 'whisper_large_turbo_v3.zip',
-      url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin',
-      sizeBytes: 1492498810,
-      description: 'Best accuracy, bilingual (EN/UR) (~1.5GB)',
-    ),
-    'qwen_2_5_1_5b': ModelInfo(
-      name: 'Qwen2.5 1.5B Instruct',
-      filename: 'qwen2_5__1_5b_instruct_q4_k_m.zip',
-      url: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
-      sizeBytes: 1091276760,
-      description: 'Smart text formatting engine (~1.1GB)',
-    ),
-  };
+static const Map<String, ModelInfo> models = {
+  // --- Transcription (STT) ---
+  'whisper-base': ModelInfo(name: 'Whisper Base', filename: 'whisper-base', layout: ModelLayout.folder, format: ModelFormat.tflite),
+  'whisper-small': ModelInfo(name: 'Whisper Small', filename: 'whisper-small', layout: ModelLayout.folder, format: ModelFormat.tflite),
+  'whisper-medium': ModelInfo(name: 'Whisper Medium', filename: 'whisper-medium', layout: ModelLayout.folder, format: ModelFormat.tflite),
+  'whisper-large-v3-turbo': ModelInfo(name: 'Whisper Large V3 Turbo', filename: 'whisper-large-v3-turbo', layout: ModelLayout.folder, format: ModelFormat.tflite),
+
+  // --- Noise Removal ---
+  'DeepFilterNet2': ModelInfo(name: 'DeepFilterNet 2', filename: 'DeepFilterNet2', layout: ModelLayout.folder, format: ModelFormat.onnx),
+  'DeepFilterNet3': ModelInfo(name: 'DeepFilterNet 3', filename: 'DeepFilterNet3', layout: ModelLayout.folder, format: ModelFormat.onnx),
+  'DTLN': ModelInfo(name: 'DTLN', filename: 'DTLN', layout: ModelLayout.folder, format: ModelFormat.tflite),
+  'DTLN-Quantized': ModelInfo(name: 'DTLN Quantized', filename: 'DTLN-Quantized', layout: ModelLayout.folder, format: ModelFormat.tflite),
+
+  // --- Text Processing (LLM) ---
+  'qwen2.5-0.5b-instruct-q4_k_m': ModelInfo(name: 'Qwen 0.5B', filename: 'qwen2.5-0.5b-instruct-q4_k_m', layout: ModelLayout.folder, format: ModelFormat.gguf),
+  'qwen2.5-1.5b-instruct-q4_k_m': ModelInfo(name: 'Qwen 1.5B', filename: 'qwen2.5-1.5b-instruct-q4_k_m', layout: ModelLayout.folder, format: ModelFormat.gguf),
+  'Llama-3.2-1B-Instruct-Q4_K_M': ModelInfo(name: 'Llama 1B', filename: 'Llama-3.2-1B-Instruct-Q4_K_M', layout: ModelLayout.folder, format: ModelFormat.gguf),
+  'Llama-3.2-3B-Instruct-Q4_K_M': ModelInfo(name: 'Llama 3B', filename: 'Llama-3.2-3B-Instruct-Q4_K_M', layout: ModelLayout.folder, format: ModelFormat.gguf),
+};
+
 
   /// Get the model storage directory
   Future<String> get modelsDir async {
@@ -172,72 +197,44 @@ class ModelManagerService {
 
   /// Check if a model exists locally and is valid
   Future<bool> isModelDownloaded(String modelId, {int? expectedSize, String? filename, bool isZip = false}) async {
-    final info = models[modelId];
-    final actualFilename = filename ?? info?.filename;
-    final actualExpectedSize = expectedSize ?? info?.sizeBytes ?? 0;
-
+    final meta = await _getModelMetadata(modelId);
+    final actualFilename = filename ?? meta?['filename'];
+    // We don't check size for manually placed directories as strictly
+    
     if (actualFilename == null) return false;
     
     final modelsDirPath = await modelsDir;
     
-    LoggingService().log(
-      'Checking model presence',
-      category: 'MODELS_DEBUG',
-      details: {
-        'modelId': modelId,
-        'isZip': isZip,
-        'filename': actualFilename,
-        'expectedSize': actualExpectedSize,
-        'dirPath': modelsDirPath,
-      },
-    );
-
-    // 1. Check for extracted directory (always check this first for robustness)
-    final dirName = p.basenameWithoutExtension(actualFilename);
-    final dir = Directory(p.join(modelsDirPath, dirName));
+    // 1. Check for directory (Manual placement use case)
+    final dir = Directory(p.join(modelsDirPath, actualFilename));
     if (dir.existsSync()) {
-      LoggingService().log('Found exact extracted directory', category: 'MODELS_DEBUG', details: {'path': dir.path});
+      try {
+        final entries = dir.listSync();
+        if (entries.isNotEmpty) {
+           LoggingService().log('Found model directory', category: 'MODELS_DEBUG', details: {'path': dir.path});
+           return true;
+        }
+      } catch (e) {
+        // Ignore list errors
+      }
+    }
+
+    // 2. Check for directory without extension (if filename has .zip)
+    final dirName = p.basenameWithoutExtension(actualFilename);
+    if (dirName != actualFilename) {
+      final dir2 = Directory(p.join(modelsDirPath, dirName));
+      if (dir2.existsSync()) {
+        LoggingService().log('Found model directory (no ext)', category: 'MODELS_DEBUG', details: {'path': dir2.path});
+        return true;
+      }
+    }
+
+    // 3. Check for the file itself (Compatibility)
+    final file = File(p.join(modelsDirPath, actualFilename));
+    if (file.existsSync()) {
       return true;
     }
 
-    // Try a few common variations or check the modelsDirPath for any common subfolders
-    // If it's a zip and the zip file is missing but we've seen it before, 
-    // we could check the models directory for non-zip entries
-    try {
-      if (isZip) {
-        final dirEntries = Directory(modelsDirPath).listSync();
-        for (final entry in dirEntries) {
-          if (entry is Directory) {
-            final entryName = p.basename(entry.path).toLowerCase();
-            final targetName = dirName.toLowerCase();
-            // Match if entry starts with or is similar to our targetName
-            if (entryName == targetName || entryName.contains(targetName) || targetName.contains(entryName)) {
-               LoggingService().log('Found similar extracted directory', category: 'MODELS_DEBUG', details: {'found': entryName, 'target': targetName});
-               return true;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore list errors
-    }
-
-    // 2. Check for the file itself (either the model bin or the zip file)
-    final file = File(p.join(modelsDirPath, actualFilename));
-    if (file.existsSync()) {
-      final size = await file.length();
-      // Use a more relaxed size check for partial/compressed files (90% threshold)
-      final isValid = actualExpectedSize <= 0 || size >= actualExpectedSize * 0.90;
-      
-      LoggingService().log(
-        'Found file',
-        category: 'MODELS_DEBUG',
-        details: {'path': file.path, 'size': size, 'isValid': isValid},
-      );
-      return isValid;
-    }
-
-    LoggingService().log('No model folder or file found', category: 'MODELS_DEBUG', details: {'modelId': modelId});
     return false;
   }
 
@@ -261,37 +258,46 @@ class ModelManagerService {
     }
   }
 
-  /// Get the local path for a model binary
-  Future<String> getModelPath(String modelKey) async {
+  /// Get the local path for a model binary or directory
+  Future<String> getModelPath(String modelKey, {String? filename}) async {
     final info = models[modelKey];
-    if (info == null) throw ArgumentError('Unknown model: $modelKey');
-    
     final modelsDirPath = await modelsDir;
-    
-    // 1. Check for extracted directory (Zipped models)
-    final dirName = p.basenameWithoutExtension(info.filename);
-    final dir = Directory(p.join(modelsDirPath, dirName));
-    if (dir.existsSync()) {
-      try {
-        // Recursive search for the actual binary/checkpoint
-        final entries = dir.listSync(recursive: true);
-        for (final entry in entries) {
-           if (entry is File) {
-             final ext = p.extension(entry.path).toLowerCase();
-             // Support .bin (Whisper), .gguf (Llama), and .ckpt (DeepFilterNet)
-             if (ext == '.bin' || ext == '.gguf' || ext == '.ckpt' || entry.path.endsWith('.ckpt.best')) {
-               return entry.path;
-             }
-           }
-        }
-      } catch (e) {
-        debugPrint('ModelManager: Error searching folder: $e');
-      }
+    final modelFolder = Directory(p.join(modelsDirPath, filename ?? info?.filename ?? modelKey));
+
+    if (!modelFolder.existsSync()) {
+       // Check if it exists as a single file instead of folder
+       final directFile = File(p.join(modelsDirPath, filename ?? info?.filename ?? modelKey));
+       if (directFile.existsSync()) return directFile.path;
+       return directFile.path; // Standard fallback
     }
-    
-    // 2. Fallback to direct file (Not a zip or folder not found)
-    return p.join(modelsDirPath, info.filename);
+
+    // Now analyze based on layout and format requirements
+    if (info?.layout == ModelLayout.folder && info?.format == ModelFormat.onnx) {
+       // ONNX engines (DeepFilterNet) usually need the base folder
+       return modelFolder.path;
+    }
+
+    // For other formats (TFLite, GGUF, GGML), we usually need the specific binary file inside the folder
+    try {
+      final entries = modelFolder.listSync(recursive: true);
+      
+      // Look for the specific extension matching the format
+      final targetExt = '.${info?.format.name ?? 'bin'}';
+      for (final entry in entries) {
+        if (entry is File) {
+          final ext = p.extension(entry.path).toLowerCase();
+          if (ext == targetExt) return entry.path;
+          
+          // Fallback matches
+          if (info?.format == ModelFormat.gguf && ext == '.bin') return entry.path;
+          if (info?.format == ModelFormat.tflite && ext == '.tflite') return entry.path;
+        }
+      }
+    } catch (_) {}
+
+    return modelFolder.path;
   }
+
 
   /// Get download progress for a model (0.0 to 1.0)
   double getProgress(String modelKey) => _downloadProgress[modelKey] ?? 0.0;
@@ -709,6 +715,8 @@ class ModelManagerService {
 class ModelInfo {
   final String name;
   final String filename;
+  final ModelLayout layout;
+  final ModelFormat format;
   final String url;
   final int sizeBytes;
   final String description;
@@ -716,9 +724,11 @@ class ModelInfo {
   const ModelInfo({
     required this.name,
     required this.filename,
-    required this.url,
-    required this.sizeBytes,
-    required this.description,
+    required this.layout,
+    required this.format,
+    this.url = '',
+    this.sizeBytes = 0,
+    this.description = '',
   });
 
   String get sizeMB => '${(sizeBytes / 1000000).round()} MB';

@@ -1,35 +1,60 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 /// Service for speech-to-text transcription using Whisper (whisper.cpp).
 /// Supports English and Urdu with offline processing.
 class TranscriptionService {
+  static const _nativeChannel = MethodChannel('com.echosync.ai/deepfilternet');
+  
   Whisper? _whisper;
   bool _isInitialized = false;
   String _currentModel = 'base';
+  String? _activeModelPath;
+  String? _activeModelName;
+  bool _isNativeTflite = false;
 
   bool get isInitialized => _isInitialized;
   String get currentModel => _currentModel;
+  String? get activeModelPath => _activeModelPath;
+  String? get activeModelName => _activeModelName;
+  bool get isNativeTflite => _isNativeTflite;
 
-  /// Initialize Whisper with the specified model.
+
+  /// Initialize Whisper with the specified model or path.
   /// Model names: 'tiny', 'base', 'small', 'medium', 'large-v3-turbo'
-  Future<bool> initialize({String model = 'base'}) async {
+  Future<bool> initialize({String model = 'base', String? modelPath}) async {
     try {
+      _activeModelPath = modelPath;
+      _activeModelName = model;
+
+      // 1. Determine engine type based on file extension
+      if (modelPath != null && modelPath.toLowerCase().endsWith('.tflite')) {
+        debugPrint('Whisper: Using Native TFLite Engine for $model');
+        _isNativeTflite = true;
+        _isInitialized = await _nativeChannel.invokeMethod<bool>('initialize', {
+          'modelPath': modelPath,
+          'engine': 'tflite',
+        }) ?? false;
+        return _isInitialized;
+      }
+
+      // 2. Fallback to whisper.cpp (GGML)
+      _isNativeTflite = false;
       final mapped = _mapModelName(model);
-      if (mapped == 'unsupported') {
-        throw UnsupportedError('Whisper Large V3 and Turbo models are NOT supported by the current engine. Please use Base, Small, or Medium.');
+      if (mapped == 'unsupported' && modelPath == null) {
+        throw UnsupportedError('Whisper Large V3 and Turbo models are NOT supported by the default engine.');
       }
       _currentModel = mapped;
 
       _whisper = Whisper(
         model: _getWhisperModel(_currentModel),
-        downloadHost: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main',
+        modelDir: modelPath != null ? File(modelPath).parent.path : null,
       );
 
-      // Verify model is loadable
-      final version = await _whisper!.getVersion();
-      debugPrint('Whisper: Initialized with model=$_currentModel, version=$version');
       _isInitialized = true;
+      debugPrint('Whisper: Initialized with GGML model=$_currentModel');
       return true;
     } catch (e) {
       debugPrint('Whisper: Initialization error: $e');
@@ -45,12 +70,20 @@ class TranscriptionService {
     String? language,
     bool translate = false,
   }) async {
-    if (!_isInitialized || _whisper == null) {
+    if (!_isInitialized) {
       throw StateError('Whisper is not initialized. Call initialize() first.');
     }
 
     try {
-      debugPrint('Whisper: Starting transcription of $audioPath');
+      debugPrint('Whisper: Starting transcription via ${_isNativeTflite ? "Native TFLite" : "GGML"} engine');
+
+      if (_isNativeTflite) {
+        final result = await _nativeChannel.invokeMethod<String>('transcribe', {
+          'audioPath': audioPath,
+          'modelPath': _activeModelPath,
+        });
+        return result ?? '';
+      }
 
       final response = await _whisper!.transcribe(
         transcribeRequest: TranscribeRequest(
@@ -59,13 +92,11 @@ class TranscriptionService {
           isNoTimestamps: true,
           splitOnWord: true,
           language: language ?? 'auto',
+          threads: 4,
         ),
       );
 
-      // Parse the result - whisper_flutter_new returns WhisperTranscribeResponse
-      final result = response.text.trim();
-      debugPrint('Whisper: Transcription complete. Length=${result.length}');
-      return result;
+      return response.text.trim();
     } catch (e) {
       debugPrint('Whisper: Transcription error: $e');
       throw Exception('Transcription failed: $e');
@@ -139,7 +170,7 @@ class TranscriptionService {
     }
   }
 
-  void dispose() {
+  Future<void> dispose() async {
     _whisper = null;
     _isInitialized = false;
   }

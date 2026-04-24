@@ -116,6 +116,7 @@ class AppProvider extends ChangeNotifier {
             break;
           case 'noise_cleaning':
             await _settings.updateNoiseCleaningModel(modelId);
+            await _pipeline.initialize();
             break;
         }
         notifyListeners(); // Second update to reflect any internal state changes after init
@@ -146,6 +147,7 @@ class AppProvider extends ChangeNotifier {
             break;
           case 'noise_cleaning':
             await _settings.updateNoiseCleaningModel('');
+            await _pipeline.initialize();
             break;
         }
         notifyListeners();
