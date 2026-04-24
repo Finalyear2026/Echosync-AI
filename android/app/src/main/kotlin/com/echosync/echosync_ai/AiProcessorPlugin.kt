@@ -16,13 +16,17 @@ class AiProcessorPlugin(private val context: Context) : MethodChannel.MethodCall
     private var isInitialized = false
     private var deepFilterNet: Any? = null
     private var tfliteInterpreter: Interpreter? = null
-    
+    private var whisperEngine: WhisperTFLiteEngine? = null
+    private var activeWhisperModelPath: String? = null
+
     private var activeModelPath: String? = null
     private var activeEngine: String? = null // "deepfilternet", "tflite"
 
     private val DF_LIB_CLASS = "com.rikorose.deepfilternet.NativeDeepFilterNet"
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
         when (call.method) {
             "initialize" -> {
                 val modelPath = call.argument<String>("modelPath")
@@ -51,8 +55,15 @@ class AiProcessorPlugin(private val context: Context) : MethodChannel.MethodCall
                 val audioPath = call.argument<String>("audioPath")
                 val modelPath = call.argument<String>("modelPath")
                 try {
-                    val transcription = transcribe(audioPath!!, modelPath)
-                    result.success(transcription)
+                    // Run on a background thread to avoid blocking the platform channel
+                    Thread {
+                        try {
+                            val transcription = transcribeWithEngine(audioPath!!, modelPath)
+                            uiHandler.post { result.success(transcription) }
+                        } catch (e: Exception) {
+                            uiHandler.post { result.error("TRANSCRIPTION_ERROR", e.message, null) }
+                        }
+                    }.start()
                 } catch (e: Exception) {
                     result.error("TRANSCRIPTION_ERROR", e.message, null)
                 }
@@ -161,16 +172,17 @@ class AiProcessorPlugin(private val context: Context) : MethodChannel.MethodCall
         return true
     }
 
-    private fun transcribe(audioPath: String, modelPath: String?): String {
-        if (activeEngine != "tflite" || activeModelPath != modelPath) {
-            initialize(modelPath, "tflite")
+    /** Run Whisper TFLite inference on an audio file. */
+    private fun transcribeWithEngine(audioPath: String, modelPath: String?): String {
+        // Initialize or re-initialize engine if model changed
+        if (whisperEngine == null || activeWhisperModelPath != modelPath) {
+            whisperEngine?.release()
+            whisperEngine = WhisperTFLiteEngine(context).also {
+                it.initialize(modelPath ?: throw Exception("No Whisper model path provided"))
+            }
+            activeWhisperModelPath = modelPath
         }
-        
-        if (tfliteInterpreter == null) throw Exception("TFLite STT Engine not initialized")
-        
-        // This is where the Whisper TFLite inference logic goes
-        // Pre-processing -> Interpreter.run() -> Post-processing (greedy/beam search)
-        return "[Transcription Placeholder for $audioPath]"
+        return whisperEngine!!.transcribe(audioPath)
     }
 
     private fun downsampleWavTo16kHz(inputPath: String, outputPath: String): Boolean {
@@ -214,17 +226,21 @@ class AiProcessorPlugin(private val context: Context) : MethodChannel.MethodCall
     }
 
     fun dispose() {
+        // Release DeepFilterNet
         if (deepFilterNet != null) {
-            try {
-                deepFilterNet?.javaClass?.getMethod("release")?.invoke(deepFilterNet)
-            } catch (e: Exception) {}
+            try { deepFilterNet?.javaClass?.getMethod("release")?.invoke(deepFilterNet) } catch (e: Exception) {}
         }
+        // Release TFLite noise interpreter
         tfliteInterpreter?.close()
-        
-        deepFilterNet = null
-        tfliteInterpreter = null
-        isInitialized = false
-        activeEngine = null
-        activeModelPath = null
+        // Release Whisper engine
+        whisperEngine?.release()
+
+        deepFilterNet        = null
+        tfliteInterpreter    = null
+        whisperEngine        = null
+        isInitialized        = false
+        activeEngine         = null
+        activeModelPath      = null
+        activeWhisperModelPath = null
     }
 }
