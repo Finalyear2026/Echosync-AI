@@ -184,11 +184,12 @@ class PipelineService {
       onStageChanged?.call(_currentStage);
       debugPrint('Pipeline: Stage → Transcribing');
 
-      // 3.1 Resampling for Whisper (16kHz) 
-      // This is crucial to avoid SIGILL crashes in Whisper's native resampler on some CPUs
-      final filteredPath = audioPath;
-      final resampledPath = await noiseFilter.resampleTo16kHz(audioPath);
-      audioPath = resampledPath;
+      // 3.1 Transcription Prep
+      final file = File(audioPath);
+      final stats = await file.stat();
+      debugPrint('Whisper: Input audio size: ${stats.size} bytes');
+      // No longer using noiseFilter.resampleTo16kHz because our native engine 
+      // now handles resampling and 32-bit float input internally with high quality.
 
       // Ensure the correct Whisper model is loaded
       final whisperKey = _mapWhisperModelKey(appSettings.whisperModel);

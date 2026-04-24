@@ -67,56 +67,53 @@ class WhisperTokenizer {
             
             while (keys.hasNext()) {
                 val key = keys.next()
-                val idStr = key.toIntOrNull()
-                
-                if (idStr != null) {
-                    // Format: "id": "token"
-                    tokenToText[idStr] = json.getString(key)
+                // IMPORTANT: The standard HF vocab is {"token": id}
+                // Even if the token is a number string like "123", it's the KEY.
+                val id = json.optInt(key, -1)
+                if (id != -1) {
+                    tokenToText[id] = key
                 } else {
-                    // Format: "token": id
-                    val id = json.optInt(key, -1)
-                    if (id != -1) {
-                        tokenToText[id] = key
+                    // Fallback for {"id": "token"} format
+                    val idFromKey = key.toIntOrNull()
+                    if (idFromKey != null) {
+                        tokenToText[idFromKey] = json.getString(key)
                     }
                 }
             }
             isLoaded = tokenToText.isNotEmpty()
-            Log.i(TAG, "Vocabulary loaded: ${tokenToText.size} tokens from ${vocabFile.name}")
+            Log.i(TAG, "Vocabulary loaded: ${tokenToText.size} tokens")
             isLoaded
         } catch (e: Exception) {
-            Log.w(TAG, "Could not load vocab file: ${e.message}. Falling back to byte-level decoding.")
-            isLoaded = false
+            Log.w(TAG, "Load error: ${e.message}")
             false
         }
     }
 
-    /**
-     * Decode a sequence of token IDs into a human-readable string.
-     * Stops at EOT or zero-padding.
-     */
     fun decode(tokenIds: IntArray): String {
-        val result = StringBuilder()
+        val byteStream = mutableListOf<Byte>()
 
         for (id in tokenIds) {
-            // Stop at end-of-text or zero-padding
-            if (id <= 0 || id == TOKEN_EOT) break
-
-            // Skip all special tokens (50256+)
+            // Stop at EOT (50257) or padding
+            if (id == TOKEN_EOT || id < 0) break
+            
+            // Skip control tokens (typically 50258+)
             if (id > TOKEN_EOT) continue
 
-            val piece = if (isLoaded) {
-                tokenToText[id] ?: continue
-            } else {
-                // Byte-level fallback: GPT-2 byte decoding
-                byteDecodeFallback(id) ?: continue
+            val piece = tokenToText[id] ?: continue
+            
+            // Convert piece (potentially GPT-2 encoded) back to raw bytes
+            for (char in piece) {
+                UNICODE_TO_BYTES[char]?.let { byteStream.add(it.toByte()) }
             }
-            result.append(piece)
         }
 
-        // GPT-2 BPE uses 'G' (U+0120) as a space prefix for new words
-        return result.toString()
-            .replace('\u0120', ' ')   // word-boundary space
-            .replace('\u010A', '\n')  // newline
+        // Convert the full byte stream to UTF-8 once to handle multi-byte chars (Emoji/Arabic/etc)
+        val decoded = String(byteStream.toByteArray(), Charsets.UTF_8)
+        
+        // Clean up GPT-2 artifact spaces and newlines
+        return decoded
+            .replace('\u0120', ' ')
+            .replace('\u010A', '\n')
             .trim()
     }
 

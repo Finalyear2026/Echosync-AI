@@ -29,12 +29,32 @@ class TranscriptionService {
       _activeModelPath = modelPath;
       _activeModelName = model;
 
-      // 1. Determine engine type based on file extension
-      if (modelPath != null && modelPath.toLowerCase().endsWith('.tflite')) {
+      // 1. Determine engine type
+      bool useTflite = false;
+      String? actualModelPath = modelPath;
+
+      if (modelPath != null) {
+        if (modelPath.toLowerCase().endsWith('.tflite')) {
+          useTflite = true;
+        } else if (Directory(modelPath).existsSync()) {
+          final dir = Directory(modelPath);
+          final tfliteFile = dir.listSync().firstWhere(
+            (f) => f is File && f.path.toLowerCase().endsWith('.tflite'),
+            orElse: () => File(''),
+          );
+          if (tfliteFile is File && tfliteFile.path.isNotEmpty) {
+            useTflite = true;
+            actualModelPath = tfliteFile.path;
+            _activeModelPath = actualModelPath;
+          }
+        }
+      }
+
+      if (useTflite && actualModelPath != null) {
         debugPrint('Whisper: Using Native TFLite Engine for $model');
         _isNativeTflite = true;
         _isInitialized = await _nativeChannel.invokeMethod<bool>('initialize', {
-          'modelPath': modelPath,
+          'modelPath': actualModelPath,
           'engine': 'tflite',
         }) ?? false;
         return _isInitialized;

@@ -260,42 +260,35 @@ static const Map<String, ModelInfo> models = {
 
   /// Get the local path for a model binary or directory
   Future<String> getModelPath(String modelKey, {String? filename}) async {
-    final info = models[modelKey];
+    final infoMap = await _getModelMetadata(modelKey);
+    final fname = filename ?? infoMap?['filename'];
     final modelsDirPath = await modelsDir;
-    final modelFolder = Directory(p.join(modelsDirPath, filename ?? info?.filename ?? modelKey));
-
-    if (!modelFolder.existsSync()) {
-       // Check if it exists as a single file instead of folder
-       final directFile = File(p.join(modelsDirPath, filename ?? info?.filename ?? modelKey));
-       if (directFile.existsSync()) return directFile.path;
-       return directFile.path; // Standard fallback
-    }
-
-    // Now analyze based on layout and format requirements
-    if (info?.layout == ModelLayout.folder && info?.format == ModelFormat.onnx) {
-       // ONNX engines (DeepFilterNet) usually need the base folder
-       return modelFolder.path;
-    }
-
-    // For other formats (TFLite, GGUF, GGML), we usually need the specific binary file inside the folder
-    try {
-      final entries = modelFolder.listSync(recursive: true);
-      
-      // Look for the specific extension matching the format
-      final targetExt = '.${info?.format.name ?? 'bin'}';
-      for (final entry in entries) {
-        if (entry is File) {
-          final ext = p.extension(entry.path).toLowerCase();
-          if (ext == targetExt) return entry.path;
-          
-          // Fallback matches
-          if (info?.format == ModelFormat.gguf && ext == '.bin') return entry.path;
-          if (info?.format == ModelFormat.tflite && ext == '.tflite') return entry.path;
+    
+    // 1. Try resolving directory
+    final modelFolder = fname != null ? Directory(p.join(modelsDirPath, fname)) : null;
+    if (modelFolder != null && modelFolder.existsSync()) {
+        if (infoMap?['format'] == 'onnx' || infoMap?['format'] == ModelFormat.onnx.name) {
+            return modelFolder.path;
         }
-      }
-    } catch (_) {}
 
-    return modelFolder.path;
+        try {
+          final entries = modelFolder.listSync(recursive: true);
+          final format = infoMap?['format']?.toString();
+          final targetExt = format == 'tflite' ? '.tflite' : (format == 'gguf' ? '.gguf' : '.bin');
+          
+          for (final entry in entries) {
+            if (entry is File) {
+               final ext = p.extension(entry.path).toLowerCase();
+               if (ext == targetExt) return entry.path;
+               if (format == 'gguf' && ext == '.bin') return entry.path;
+            }
+          }
+        } catch (_) {}
+        return modelFolder.path;
+    }
+
+    final directFile = fname != null ? File(p.join(modelsDirPath, fname)) : File(p.join(modelsDirPath, modelKey));
+    return directFile.existsSync() ? directFile.path : directFile.path;
   }
 
 

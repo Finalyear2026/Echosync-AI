@@ -170,17 +170,28 @@ class WhisperTFLiteEngine(private val context: Context) {
             .coerceAtMost(CHUNK_SAMPLES)
 
         val mono = FloatArray(numSamples)
+        val dataBuffer = ByteBuffer.wrap(bytes, dataStart, dataSize).order(ByteOrder.LITTLE_ENDIAN)
+
         for (s in 0 until numSamples) {
             var sum = 0f
             for (ch in 0 until numChannels) {
-                val base = dataStart + (s * numChannels + ch) * bytesPerSample
-                if (base + bytesPerSample > bytes.size) break
                 val v = when (bytesPerSample) {
-                    2 -> int16At(base).let { if (it >= 32768) it - 65536 else it }
-                    1 -> (bytes[base].toInt() and 0xFF) - 128
-                    else -> 0
+                    4 -> { // 32-bit Float or Int
+                        val raw = dataBuffer.float // Assume Float (standard for AI models)
+                        raw
+                    }
+                    3 -> { // 24-bit PCM
+                        val b1 = dataBuffer.get().toInt() and 0xFF
+                        val b2 = dataBuffer.get().toInt() and 0xFF
+                        val b3 = dataBuffer.get().toInt()
+                        val sample = (b3 shl 16) or (b2 shl 8) or b1
+                        sample / 8388608f
+                    }
+                    2 -> dataBuffer.short / 32768f
+                    1 -> (dataBuffer.get().toInt() and 0xFF - 128) / 128f
+                    else -> 0f
                 }
-                sum += v / 32_768f
+                sum += v
             }
             mono[s] = (sum / numChannels).coerceIn(-1f, 1f)
         }
@@ -214,56 +225,53 @@ class WhisperTFLiteEngine(private val context: Context) {
     private fun computeLogMelSpectrogram(pcm: FloatArray): Array<FloatArray> {
         // Pad to ensure we produce exactly N_FRAMES
         val paddedLen = (N_FRAMES - 1) * HOP_LENGTH + WINDOW_SIZE
-        val padded = FloatArray(paddedLen)
-        pcm.copyInto(padded, 0, 0, minOf(pcm.size, paddedLen))
-
         val nFreq  = N_FFT / 2 + 1
         val mel    = Array(N_MELS) { FloatArray(N_FRAMES) }
         val re     = DoubleArray(N_FFT)
         val im     = DoubleArray(N_FFT)
 
+        val padded = FloatArray(paddedLen)
+        val mean = pcm.average().toFloat()
+        for (i in pcm.indices) padded[i] = (pcm[i] - mean)
+
         for (frame in 0 until N_FRAMES) {
             val start = frame * HOP_LENGTH
 
-            // Apply Hann window and pad to N_FFT
+            // Zero out re/im buffers
+            for (i in 0 until N_FFT) { re[i] = 0.0; im[i] = 0.0 }
+
             for (n in 0 until N_FFT) {
                 if (n < WINDOW_SIZE && (start + n) < paddedLen) {
                     re[n] = (padded[start + n] * hannWindow[n]).toDouble()
                 } else {
                     re[n] = 0.0
                 }
-                im[n] = 0.0
             }
 
-            // In-place FFT
             fft(re, im)
 
-            // Power spectrum  |X[k]|²
-            val power = FloatArray(nFreq) { k ->
-                (re[k] * re[k] + im[k] * im[k]).toFloat()
-            }
-
-            // Apply mel filterbank
+            // Apply mel filterbank with proper power normalization
+            // Normalizing by (WINDOW_SIZE / 2)^2 brings the energy into the standard [0, 1] range for log calculations
+            val normFactor = (WINDOW_SIZE / 2.0).pow(2.0).toFloat()
             for (m in 0 until N_MELS) {
                 var e = 0f
-                for (k in 0 until nFreq) e += melFilters[m][k] * power[k]
+                for (k in 0 until nFreq) {
+                    val p = (re[k] * re[k] + im[k] * im[k]).toFloat() / normFactor
+                    e += melFilters[m][k] * p
+                }
                 mel[m][frame] = e
             }
         }
 
-        // Log-mel + normalize (Whisper normalisation)
-        //   log10(max(x, 1e-10))
-        //   clamp to (max - 8) .. max
-        //   scale to [-1, 1] by  (x + 4) / 4
         val logMel = Array(N_MELS) { m ->
             FloatArray(N_FRAMES) { t -> log10(mel[m][t].coerceAtLeast(1e-10f)) }
         }
-        var globalMax = Float.NEGATIVE_INFINITY
-        for (row in logMel) for (v in row) if (v > globalMax) globalMax = v
-
+        
+        // Industry Standard OpenAI Normalization: (log_spec + 4.0) / 4.0
+        // Silence (-10) maps to -1.5, Full-scale speech (0) maps to 1.0.
         for (m in 0 until N_MELS) {
             for (t in 0 until N_FRAMES) {
-                logMel[m][t] = ((logMel[m][t].coerceAtLeast(globalMax - 8f)) + 4f) / 4f
+                logMel[m][t] = (logMel[m][t] + 4.0f) / 4.0f
             }
         }
         return logMel
@@ -290,17 +298,21 @@ class WhisperTFLiteEngine(private val context: Context) {
         // N_MELS + 2 equally-spaced mel points → Hz → FFT bin
         val melPts = DoubleArray(N_MELS + 2) { i -> melMin + i * (melMax - melMin) / (N_MELS + 1) }
         val bins   = IntArray(N_MELS + 2) { i ->
-            floor(melToHz(melPts[i]) * nFreq / SAMPLE_RATE).toInt().coerceIn(0, nFreq - 1)
+            floor(melToHz(melPts[i]) * N_FFT / SAMPLE_RATE).toInt().coerceIn(0, nFreq - 1)
         }
 
         return Array(N_MELS) { m ->
+            // Area normalization factor (norm='slaney')
+            val enorm = 2.0f / (melToHz(melPts[m + 2]) - melToHz(melPts[m])).toFloat()
+            
             FloatArray(nFreq) { k ->
                 val lo = bins[m]; val mid = bins[m + 1]; val hi = bins[m + 2]
-                when {
+                val weight = when {
                     k in lo until mid && mid > lo -> (k - lo).toFloat() / (mid - lo)
                     k in mid..hi    && hi  > mid  -> (hi - k).toFloat() / (hi  - mid)
                     else -> 0f
                 }
+                weight * enorm
             }
         }
     }
