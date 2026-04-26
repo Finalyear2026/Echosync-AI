@@ -33,7 +33,7 @@ class SettingsService {
 
     _isInitialized = true;
     debugPrint('Settings: Initialized in $_basePath');
-    
+
     // Cleanup legacy files on background
     _cleanupLegacyFiles();
   }
@@ -62,7 +62,7 @@ class SettingsService {
       final files = dir.listSync();
       for (final f in files) {
         if (f is File && f.path.endsWith('.part')) {
-           await f.delete();
+          await f.delete();
         }
       }
     } catch (e) {
@@ -80,7 +80,7 @@ class SettingsService {
     try {
       final file = _getFile(_settingsFileName);
       if (!file.existsSync()) return AppSettings();
-      
+
       final content = file.readAsStringSync();
       final json = jsonDecode(content);
       return AppSettings.fromJson(Map<String, dynamic>.from(json as Map));
@@ -136,6 +136,12 @@ class SettingsService {
     await saveSettings(settings);
   }
 
+  Future<void> setUseWhisperCppEngine(bool enabled) async {
+    final settings = getSettings();
+    settings.useWhisperCppEngine = enabled;
+    await saveSettings(settings);
+  }
+
   // --- Model Registry Sync ---
 
   String? getRegistryEtag() {
@@ -161,11 +167,14 @@ class SettingsService {
     try {
       final file = _getFile(_dictionaryFileName);
       if (!file.existsSync()) return [];
-      
+
       final content = file.readAsStringSync();
       final List<dynamic> jsonList = jsonDecode(content);
       return jsonList
-          .map((e) => DictionaryEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) =>
+                DictionaryEntry.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
           .toList();
     } catch (e) {
       debugPrint('Settings: Error reading dictionary: $e');
@@ -183,7 +192,10 @@ class SettingsService {
     }
   }
 
-  Future<void> addDictionaryEntry(String misheardWord, String correctWord) async {
+  Future<void> addDictionaryEntry(
+    String misheardWord,
+    String correctWord,
+  ) async {
     final entries = getDictionary();
     final entry = DictionaryEntry(
       id: _uuid.v4(),
@@ -226,7 +238,7 @@ class SettingsService {
     try {
       final file = _getFile(_snippetsFileName);
       if (!file.existsSync()) return [];
-      
+
       final content = file.readAsStringSync();
       final List<dynamic> jsonList = jsonDecode(content);
       return jsonList

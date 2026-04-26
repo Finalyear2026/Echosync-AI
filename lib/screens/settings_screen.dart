@@ -4,7 +4,6 @@ import '../providers/app_provider.dart';
 import '../models/processing_state.dart';
 import '../theme/app_theme.dart';
 
-
 /// Settings screen with dictionary, snippets, style/tone, and model management.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -25,20 +24,31 @@ class SettingsScreen extends StatelessWidget {
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       children: [
-                         _SectionHeader(title: 'Transcription', icon: Icons.subtitles_rounded),
-                         _TranscriptionSettings(provider: provider),
-                         const SizedBox(height: 24),
+                        _SectionHeader(
+                          title: 'Transcription',
+                          icon: Icons.subtitles_rounded,
+                        ),
+                        _TranscriptionSettings(provider: provider),
+                        const SizedBox(height: 24),
 
-                         _SectionHeader(title: 'Personal Dictionary', icon: Icons.spellcheck_rounded),
-                         _DictionarySection(provider: provider),
-                         const SizedBox(height: 24),
-
-
-                        _SectionHeader(title: 'Personal Dictionary', icon: Icons.spellcheck_rounded),
+                        _SectionHeader(
+                          title: 'Personal Dictionary',
+                          icon: Icons.spellcheck_rounded,
+                        ),
                         _DictionarySection(provider: provider),
                         const SizedBox(height: 24),
 
-                        _SectionHeader(title: 'Snippet Library', icon: Icons.text_snippet_rounded),
+                        _SectionHeader(
+                          title: 'Personal Dictionary',
+                          icon: Icons.spellcheck_rounded,
+                        ),
+                        _DictionarySection(provider: provider),
+                        const SizedBox(height: 24),
+
+                        _SectionHeader(
+                          title: 'Snippet Library',
+                          icon: Icons.text_snippet_rounded,
+                        ),
                         _SnippetSection(provider: provider),
                         const SizedBox(height: 40),
                       ],
@@ -194,6 +204,15 @@ class _TranscriptionSettings extends StatelessWidget {
               onChanged: (value) => provider.setNoiseFilterEnabled(value),
             ),
           ),
+          Divider(color: Colors.white.withOpacity(0.06)),
+
+          _SettingsRow(
+            label: 'Use whisper.cpp (.bin)',
+            child: Switch(
+              value: settings.useWhisperCppEngine,
+              onChanged: (value) => provider.setUseWhisperCppEngine(value),
+            ),
+          ),
         ],
       ),
     );
@@ -230,8 +249,6 @@ class _SettingsRow extends StatelessWidget {
   }
 }
 
-
-
 // --- Dictionary Section ---
 class _DictionarySection extends StatelessWidget {
   final AppProvider provider;
@@ -260,22 +277,24 @@ class _DictionarySection extends StatelessWidget {
                 style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
               ),
             ),
-          ...entries.map((entry) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  '"${entry.misheardWord}" → "${entry.correctWord}"',
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 13,
-                  ),
+          ...entries.map(
+            (entry) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                '"${entry.misheardWord}" → "${entry.correctWord}"',
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
                 ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  color: AppTheme.textMuted,
-                  onPressed: () => provider.deleteDictionaryEntry(entry.id),
-                ),
-              )),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                color: AppTheme.textMuted,
+                onPressed: () => provider.deleteDictionaryEntry(entry.id),
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
           _AddButton(
             label: 'Add Word',
@@ -324,7 +343,9 @@ class _DictionarySection extends StatelessWidget {
               if (misheardController.text.isNotEmpty &&
                   correctController.text.isNotEmpty) {
                 provider.addDictionaryEntry(
-                    misheardController.text, correctController.text);
+                  misheardController.text,
+                  correctController.text,
+                );
                 Navigator.pop(context);
               }
             },
@@ -364,32 +385,31 @@ class _SnippetSection extends StatelessWidget {
                 style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
               ),
             ),
-          ...snippets.map((snippet) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  '"${snippet.triggerPhrase}"',
-                  style: const TextStyle(
-                    color: AppTheme.accentCyan,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+          ...snippets.map(
+            (snippet) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                '"${snippet.triggerPhrase}"',
+                style: const TextStyle(
+                  color: AppTheme.accentCyan,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-                subtitle: Text(
-                  snippet.templateContent,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  color: AppTheme.textMuted,
-                  onPressed: () => provider.deleteSnippet(snippet.id),
-                ),
-              )),
+              ),
+              subtitle: Text(
+                snippet.templateContent,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                color: AppTheme.textMuted,
+                onPressed: () => provider.deleteSnippet(snippet.id),
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
           _AddButton(
             label: 'Add Snippet',
@@ -439,7 +459,9 @@ class _SnippetSection extends StatelessWidget {
               if (triggerController.text.isNotEmpty &&
                   templateController.text.isNotEmpty) {
                 provider.addSnippet(
-                    triggerController.text, templateController.text);
+                  triggerController.text,
+                  templateController.text,
+                );
                 Navigator.pop(context);
               }
             },

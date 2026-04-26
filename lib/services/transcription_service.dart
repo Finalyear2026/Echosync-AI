@@ -1,13 +1,14 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 /// Service for speech-to-text transcription using Whisper (whisper.cpp).
 /// Supports English and Urdu with offline processing.
 class TranscriptionService {
   static const _nativeChannel = MethodChannel('com.echosync.ai/deepfilternet');
-  
+
   Whisper? _whisper;
   bool _isInitialized = false;
   String _currentModel = 'base';
@@ -21,56 +22,60 @@ class TranscriptionService {
   String? get activeModelName => _activeModelName;
   bool get isNativeTflite => _isNativeTflite;
 
-
   /// Initialize Whisper with the specified model or path.
   /// Model names: 'tiny', 'base', 'small', 'medium', 'large-v3-turbo'
-  Future<bool> initialize({String model = 'base', String? modelPath}) async {
+  Future<bool> initialize({
+    String model = 'base',
+    String? modelPath,
+    bool useWhisperCpp = false,
+  }) async {
     try {
-      _activeModelPath = modelPath;
+      final resolvedModelPath = resolveModelPathForEngine(
+        modelPath,
+        useWhisperCpp: useWhisperCpp,
+      );
+      _activeModelPath = resolvedModelPath;
       _activeModelName = model;
 
-      // 1. Determine engine type
-      bool useTflite = false;
-      String? actualModelPath = modelPath;
-
-      if (modelPath != null) {
-        if (modelPath.toLowerCase().endsWith('.tflite')) {
-          useTflite = true;
-        } else if (Directory(modelPath).existsSync()) {
-          final dir = Directory(modelPath);
-          final tfliteFile = dir.listSync().firstWhere(
-            (f) => f is File && f.path.toLowerCase().endsWith('.tflite'),
-            orElse: () => File(''),
-          );
-          if (tfliteFile is File && tfliteFile.path.isNotEmpty) {
-            useTflite = true;
-            actualModelPath = tfliteFile.path;
-            _activeModelPath = actualModelPath;
-          }
-        }
-      }
-
-      if (useTflite && actualModelPath != null) {
+      if (!useWhisperCpp && resolvedModelPath != null) {
         debugPrint('Whisper: Using Native TFLite Engine for $model');
         _isNativeTflite = true;
-        _isInitialized = await _nativeChannel.invokeMethod<bool>('initialize', {
-          'modelPath': actualModelPath,
-          'engine': 'tflite',
-        }) ?? false;
+        _isInitialized =
+            await _nativeChannel.invokeMethod<bool>('initialize', {
+              'modelPath': resolvedModelPath,
+              'engine': 'tflite',
+            }) ??
+            false;
         return _isInitialized;
       }
 
-      // 2. Fallback to whisper.cpp (GGML)
+      if (!useWhisperCpp && resolvedModelPath == null && modelPath != null) {
+        throw StateError(
+          'TFLite requested but exact model file was not found for: $modelPath',
+        );
+      }
+
+      // whisper.cpp engine path is expected to resolve to a sibling .bin file.
+      if (useWhisperCpp && resolvedModelPath == null && modelPath != null) {
+        throw StateError(
+          'Whisper.cpp requested but no sibling .bin file was found for: $modelPath',
+        );
+      }
+
       _isNativeTflite = false;
       final mapped = _mapModelName(model);
       if (mapped == 'unsupported' && modelPath == null) {
-        throw UnsupportedError('Whisper Large V3 and Turbo models are NOT supported by the default engine.');
+        throw UnsupportedError(
+          'Whisper Large V3 and Turbo models are NOT supported by the default engine.',
+        );
       }
       _currentModel = mapped;
 
       _whisper = Whisper(
         model: _getWhisperModel(_currentModel),
-        modelDir: modelPath != null ? File(modelPath).parent.path : null,
+        modelDir: resolvedModelPath != null
+            ? File(resolvedModelPath).parent.path
+            : null,
       );
 
       _isInitialized = true;
@@ -81,6 +86,39 @@ class TranscriptionService {
       _isInitialized = false;
       return false;
     }
+  }
+
+  String? resolveModelPathForEngine(
+    String? modelPath, {
+    required bool useWhisperCpp,
+  }) {
+    if (modelPath == null || modelPath.isEmpty) return null;
+    return _resolveStrictWhisperModelPath(
+      modelPath,
+      useWhisperCpp: useWhisperCpp,
+    );
+  }
+
+  String? _resolveStrictWhisperModelPath(
+    String inputPath, {
+    required bool useWhisperCpp,
+  }) {
+    final asDir = Directory(inputPath);
+    final modelDir = asDir.existsSync()
+        ? asDir.path
+        : File(inputPath).parent.path;
+
+    final folderName = p.basename(modelDir).toLowerCase();
+    final folderModelPart = folderName.startsWith('whisper-')
+        ? folderName.substring('whisper-'.length)
+        : folderName;
+
+    final fileName = useWhisperCpp
+        ? 'ggml-$folderModelPart.bin'
+        : 'whisper-$folderModelPart.tflite';
+
+    final resolved = p.join(modelDir, fileName);
+    return File(resolved).existsSync() ? resolved : null;
   }
 
   /// Transcribe an audio file.
@@ -95,7 +133,9 @@ class TranscriptionService {
     }
 
     try {
-      debugPrint('Whisper: Starting transcription via ${_isNativeTflite ? "Native TFLite" : "GGML"} engine');
+      debugPrint(
+        'Whisper: Starting transcription via ${_isNativeTflite ? "Native TFLite" : "GGML"} engine',
+      );
 
       if (_isNativeTflite) {
         final result = await _nativeChannel.invokeMethod<String>('transcribe', {
@@ -126,7 +166,7 @@ class TranscriptionService {
   /// Map user-friendly model names to internal model names
   String _mapModelName(String model) {
     final m = model.toLowerCase();
-    
+
     // Explicitly block V3/Turbo to avoid SIGILL crash
     if (m.contains('v3') || m.contains('turbo')) {
       return 'unsupported';

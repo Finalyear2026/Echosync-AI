@@ -23,16 +23,15 @@ class AppProvider extends ChangeNotifier {
   final Map<String, bool> _modelStatuses = {};
   final Set<String> _pausedModels = {}; // Track models that are manually paused
 
-
   // Cloud Registry
   List<dynamic> _cloudCategories = [];
   final Set<String> _activeDownloadIds = {};
   final Map<String, DownloadProgressInfo> _downloadProgress = {};
-  
+
   // Registry state
   bool _isRegistryLoading = false;
   String? _registryError;
-  
+
   // Selection state
   final Map<String, String> _activeModels = {}; // categoryId -> modelId
 
@@ -40,9 +39,9 @@ class AppProvider extends ChangeNotifier {
     required PipelineService pipeline,
     required SettingsService settings,
     required ModelManagerService modelManager,
-  })  : _pipeline = pipeline,
-        _settings = settings,
-        _modelManager = modelManager {
+  }) : _pipeline = pipeline,
+       _settings = settings,
+       _modelManager = modelManager {
     // Sync initial active models from results of settings
     _syncActiveModelsFromSettings();
   }
@@ -69,7 +68,8 @@ class AppProvider extends ChangeNotifier {
   Map<String, bool> get modelStatuses => _modelStatuses;
   bool get isDownloading => _activeDownloadIds.isNotEmpty;
   Set<String> get activeDownloadIds => _activeDownloadIds;
-  bool isModelDownloading(String modelId) => _activeDownloadIds.contains(modelId);
+  bool isModelDownloading(String modelId) =>
+      _activeDownloadIds.contains(modelId);
   Map<String, String> get activeModels => _activeModels;
 
   /// Get active model names for display
@@ -79,16 +79,16 @@ class AppProvider extends ChangeNotifier {
       final categoryId = category['id'] as String;
       final categoryName = category['name'] as String;
       final activeId = _activeModels[categoryId];
-      
+
       if (activeId == null || activeId.isEmpty) {
         names[categoryName] = 'None';
         continue;
       }
-      
+
       final models = category['models'] as List;
       final model = models.firstWhere(
-        (m) => m['id'] == activeId, 
-        orElse: () => null
+        (m) => m['id'] == activeId,
+        orElse: () => null,
       );
       names[categoryName] = model != null ? model['name'] as String : 'Unknown';
     }
@@ -97,8 +97,12 @@ class AppProvider extends ChangeNotifier {
 
   /// Set a model as active for its category
   Future<void> activateModel(String category, String modelId) async {
-    LoggingService().log('Activating model', category: 'MODELS', details: {'category': category, 'modelId': modelId});
-    
+    LoggingService().log(
+      'Activating model',
+      category: 'MODELS',
+      details: {'category': category, 'modelId': modelId},
+    );
+
     // 1. INSTANT UI UPDATE
     _activeModels[category] = modelId;
     notifyListeners();
@@ -128,8 +132,12 @@ class AppProvider extends ChangeNotifier {
 
   /// Clear the active model for a category
   Future<void> deactivateModel(String categoryId) async {
-    LoggingService().log('Deactivating model', category: 'MODELS', details: {'category': categoryId});
-    
+    LoggingService().log(
+      'Deactivating model',
+      category: 'MODELS',
+      details: {'category': categoryId},
+    );
+
     // 1. INSTANT UI UPDATE
     _activeModels[categoryId] = '';
     notifyListeners();
@@ -193,22 +201,21 @@ class AppProvider extends ChangeNotifier {
   List<DictionaryEntry> get dictionary =>
       _isInitialized ? _settings.getDictionary() : [];
   List<Snippet> get snippets => _isInitialized ? _settings.getSnippets() : [];
-  
+
   List<dynamic> get cloudCategories => _cloudCategories;
   bool get isRegistryLoading => _isRegistryLoading;
   String? get registryError => _registryError;
   Set<String> get pausedModels => _pausedModels;
-  
+
   /// Check if a model is currently paused
   bool isPaused(String modelId) => _pausedModels.contains(modelId);
 
-  
   // Helper to check if a specific model is downloaded
   bool isModelDownloaded(String modelId) {
     // Check locally by looking for the filename in the path
     // For now, simpler check against modelManager's internal status
     // (Improved in v0.2 to look at actual file presence)
-    return _modelStatuses[modelId] ?? false; 
+    return _modelStatuses[modelId] ?? false;
   }
 
   /// Initialize the app
@@ -219,12 +226,12 @@ class AppProvider extends ChangeNotifier {
         await _settings.initialize();
       }
       await LoggingService().init();
-      
+
       // Ensure local registry (models.json) exists at startup
       // Load local repository metadata
       final localRegistry = await _modelManager.loadLocalRegistry();
       _cloudCategories = localRegistry['categories'] ?? [];
-      
+
       await _pipeline.initialize();
       await refreshModelStatuses();
       _isInitialized = true;
@@ -250,27 +257,32 @@ class AppProvider extends ChangeNotifier {
       }
     }
 
-    final statuses = await _modelManager.getModelStatuses(dynamicModels: dynamicMeta);
+    final statuses = await _modelManager.getModelStatuses(
+      dynamicModels: dynamicMeta,
+    );
     _modelStatuses.clear();
     _modelStatuses.addAll(statuses);
-    
+
     LoggingService().log(
       'Model statuses refreshed',
       category: 'MODELS',
-      details: {'count': statuses.length, 'downloaded_count': statuses.values.where((v) => v).length},
+      details: {
+        'count': statuses.length,
+        'downloaded_count': statuses.values.where((v) => v).length,
+      },
     );
-    
+
     // Also check for partial downloads to show "Resume" status
     for (final category in _cloudCategories) {
       final models = category['models'] as List;
       for (final m in models) {
         final id = m['id'];
         final pInfo = await _modelManager.getPartialDownloadInfo(
-          id, 
+          id,
           filename: m['filename'],
           expectedSize: m['size_bytes'],
         );
-        
+
         if (pInfo != null && !statuses[id]!) {
           _pausedModels.add(id);
           _downloadProgress[id] = pInfo;
@@ -295,17 +307,25 @@ class AppProvider extends ChangeNotifier {
       // If a model is selected, verify it's still available
       if (currentActive.isNotEmpty) {
         bool isActiveDownloaded = _modelStatuses[currentActive] ?? false;
-        
+
         if (!isActiveDownloaded) {
-          LoggingService().log('Active model no longer available, clearing selection', 
-            category: 'MODELS', 
-            details: {'category': categoryId, 'modelId': currentActive});
-          
+          LoggingService().log(
+            'Active model no longer available, clearing selection',
+            category: 'MODELS',
+            details: {'category': categoryId, 'modelId': currentActive},
+          );
+
           _activeModels[categoryId] = '';
           switch (categoryId) {
-            case 'stt': await _settings.updateWhisperModel(''); break;
-            case 'nlp': await _settings.updateNLPModel(''); break;
-            case 'noise_cleaning': await _settings.updateNoiseCleaningModel(''); break;
+            case 'stt':
+              await _settings.updateWhisperModel('');
+              break;
+            case 'nlp':
+              await _settings.updateNLPModel('');
+              break;
+            case 'noise_cleaning':
+              await _settings.updateNoiseCleaningModel('');
+              break;
           }
           changed = true;
         }
@@ -351,7 +371,8 @@ class AppProvider extends ChangeNotifier {
   void _updateRecordingDuration() {
     Future.delayed(const Duration(seconds: 1), () {
       if (_stage == ProcessingStage.recording) {
-        _recordingDuration = _pipeline.audioRecorder.getRecordingDuration() ??
+        _recordingDuration =
+            _pipeline.audioRecorder.getRecordingDuration() ??
             _recordingDuration + const Duration(seconds: 1);
         notifyListeners();
         _updateRecordingDuration();
@@ -404,7 +425,7 @@ class AppProvider extends ChangeNotifier {
       _syncInBackground();
       return;
     }
-    
+
     if (_isRegistryLoading) return;
 
     _isRegistryLoading = true;
@@ -419,15 +440,24 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
 
       // 2. Then Sync with Cloud (GitHub)
-      final updatedRegistry = await _modelManager.syncRegistryWithCloud(_settings);
+      final updatedRegistry = await _modelManager.syncRegistryWithCloud(
+        _settings,
+      );
       if (updatedRegistry != null) {
         _cloudCategories = updatedRegistry['categories'] ?? [];
         await refreshModelStatuses();
-        LoggingService().log('Cloud registry updated and applied', category: 'MODELS');
+        LoggingService().log(
+          'Cloud registry updated and applied',
+          category: 'MODELS',
+        );
       }
     } catch (e) {
       _registryError = 'Failed to load models: $e';
-      LoggingService().log('Registry fetch failed', category: 'MODELS_ERROR', details: {'error': e.toString()});
+      LoggingService().log(
+        'Registry fetch failed',
+        category: 'MODELS_ERROR',
+        details: {'error': e.toString()},
+      );
     } finally {
       _isRegistryLoading = false;
       notifyListeners();
@@ -437,12 +467,17 @@ class AppProvider extends ChangeNotifier {
   /// Perform a quiet background sync without showing loading spinners
   Future<void> _syncInBackground() async {
     try {
-      final updatedRegistry = await _modelManager.syncRegistryWithCloud(_settings);
+      final updatedRegistry = await _modelManager.syncRegistryWithCloud(
+        _settings,
+      );
       if (updatedRegistry != null) {
         _cloudCategories = updatedRegistry['categories'] ?? [];
         await refreshModelStatuses();
         notifyListeners();
-        LoggingService().log('Background registry sync completed', category: 'MODELS');
+        LoggingService().log(
+          'Background registry sync completed',
+          category: 'MODELS',
+        );
       }
     } catch (e) {
       // Fail silently in background
@@ -465,9 +500,10 @@ class AppProvider extends ChangeNotifier {
     String? filename,
   }) async {
     _activeDownloadIds.add(modelId);
-    _pausedModels.remove(modelId); // Remove from paused if we are starting/resuming
+    _pausedModels.remove(
+      modelId,
+    ); // Remove from paused if we are starting/resuming
     notifyListeners();
-
 
     try {
       LoggingService().log(
@@ -492,13 +528,13 @@ class AppProvider extends ChangeNotifier {
           notifyListeners();
         },
       );
-      
+
       LoggingService().log(
         'Model download completed successfully',
         category: 'MODELS',
         details: {'model_id': modelId},
       );
-      
+
       await refreshModelStatuses();
     } catch (e) {
       _errorMessage = 'Download failed: $e';
@@ -519,7 +555,7 @@ class AppProvider extends ChangeNotifier {
     _modelManager.pauseDownload(modelId);
     _activeDownloadIds.remove(modelId);
     _pausedModels.add(modelId);
-    
+
     // Reset speed to 0 so the UI shows 0 KB/s immediately upon pause
     final info = _downloadProgress[modelId];
     if (info != null) {
@@ -554,15 +590,23 @@ class AppProvider extends ChangeNotifier {
   }
 
   /// Delete a downloaded model
-  Future<void> deleteModel(String modelId, {String? filename, bool isZip = false}) async {
+  Future<void> deleteModel(
+    String modelId, {
+    String? filename,
+    bool isZip = false,
+  }) async {
     try {
       LoggingService().log(
         'Deleting model',
         category: 'MODELS',
         details: {'model_id': modelId, 'filename': filename, 'is_zip': isZip},
       );
-      await _modelManager.deleteModel(modelId, filename: filename, isZip: isZip);
-      
+      await _modelManager.deleteModel(
+        modelId,
+        filename: filename,
+        isZip: isZip,
+      );
+
       LoggingService().log(
         'Model deleted successfully',
         category: 'MODELS',
@@ -580,7 +624,6 @@ class AppProvider extends ChangeNotifier {
       rethrow;
     }
   }
-
 
   // --- Settings mutations ---
 
@@ -604,6 +647,12 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setUseWhisperCppEngine(bool enabled) async {
+    await _settings.setUseWhisperCppEngine(enabled);
+    await _pipeline.initialize();
+    notifyListeners();
+  }
+
   // --- Dictionary ---
 
   Future<void> addDictionaryEntry(String misheard, String correct) async {
@@ -612,7 +661,10 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> updateDictionaryEntry(
-      String id, String misheard, String correct) async {
+    String id,
+    String misheard,
+    String correct,
+  ) async {
     await _settings.updateDictionaryEntry(id, misheard, correct);
     notifyListeners();
   }
@@ -624,16 +676,27 @@ class AppProvider extends ChangeNotifier {
 
   // --- Snippets ---
 
-  Future<void> addSnippet(String trigger, String template,
-      {String? description}) async {
+  Future<void> addSnippet(
+    String trigger,
+    String template, {
+    String? description,
+  }) async {
     await _settings.addSnippet(trigger, template, description: description);
     notifyListeners();
   }
 
-  Future<void> updateSnippet(String id, String trigger, String template,
-      {String? description}) async {
-    await _settings.updateSnippet(id, trigger, template,
-        description: description);
+  Future<void> updateSnippet(
+    String id,
+    String trigger,
+    String template, {
+    String? description,
+  }) async {
+    await _settings.updateSnippet(
+      id,
+      trigger,
+      template,
+      description: description,
+    );
     notifyListeners();
   }
 

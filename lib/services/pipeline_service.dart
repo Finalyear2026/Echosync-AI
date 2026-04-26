@@ -40,12 +40,19 @@ class PipelineService {
       final appSettings = settings.getSettings();
 
       // Initialize noise filter with selected model if available
-      if (appSettings.noiseFilterEnabled && appSettings.noiseCleaningModel.isNotEmpty) {
+      if (appSettings.noiseFilterEnabled &&
+          appSettings.noiseCleaningModel.isNotEmpty) {
         final info = ModelManagerService.models[appSettings.noiseCleaningModel];
-        final engine = (info?.format == ModelFormat.tflite) ? 'tflite' : 'deepfilternet';
+        final engine = (info?.format == ModelFormat.tflite)
+            ? 'tflite'
+            : 'deepfilternet';
 
-        if (await modelManager.isModelDownloaded(appSettings.noiseCleaningModel)) {
-          final noisePath = await modelManager.getModelPath(appSettings.noiseCleaningModel);
+        if (await modelManager.isModelDownloaded(
+          appSettings.noiseCleaningModel,
+        )) {
+          final noisePath = await modelManager.getModelPath(
+            appSettings.noiseCleaningModel,
+          );
           await noiseFilter.initialize(modelPath: noisePath, engine: engine);
         } else {
           await noiseFilter.initialize();
@@ -59,15 +66,21 @@ class PipelineService {
 
       // Check if whisper model is downloaded
       if (await modelManager.isModelDownloaded(whisperKey)) {
-        final whisperPath = await modelManager.getModelPath(whisperKey);
+        final baseWhisperPath = await modelManager.getModelPath(whisperKey);
+        final whisperPath = transcription.resolveModelPathForEngine(
+          baseWhisperPath,
+          useWhisperCpp: appSettings.useWhisperCppEngine,
+        );
         await transcription.initialize(
           model: appSettings.whisperModel,
           modelPath: whisperPath,
+          useWhisperCpp: appSettings.useWhisperCppEngine,
         );
       }
 
       // Check if LLM model is downloaded
-      if (appSettings.nlpModel.isNotEmpty && await modelManager.isModelDownloaded(appSettings.nlpModel)) {
+      if (appSettings.nlpModel.isNotEmpty &&
+          await modelManager.isModelDownloaded(appSettings.nlpModel)) {
         final llmPath = await modelManager.getModelPath(appSettings.nlpModel);
         await llm.loadModel(llmPath);
       }
@@ -80,39 +93,50 @@ class PipelineService {
     }
   }
 
-   String _mapWhisperModelKey(String model) {
+  String _mapWhisperModelKey(String model) {
     final m = model.toLowerCase();
-    
+
     // Exact folder names matching your list
     if (m.contains('base')) return 'whisper-base';
     if (m.contains('small')) return 'whisper-small';
     if (m.contains('medium')) return 'whisper-medium';
-    if (m.contains('v3') || m.contains('turbo')) return 'whisper-large-v3-turbo';
-    
+    if (m.contains('v3') || m.contains('turbo'))
+      return 'whisper-large-v3-turbo';
+
     return 'whisper-base';
   }
-
 
   /// Check if models are ready for transcription
   Future<bool> areModelsReady() async {
     final appSettings = settings.getSettings();
-    
+
     // 1. Check Whisper (STT)
     final whisperKey = _mapWhisperModelKey(appSettings.whisperModel);
     if (whisperKey == 'unsupported') return false;
     final whisperReady = await modelManager.isModelDownloaded(whisperKey);
     if (!whisperReady) return false;
+    final baseWhisperPath = await modelManager.getModelPath(whisperKey);
+    final resolvedWhisperPath = transcription.resolveModelPathForEngine(
+      baseWhisperPath,
+      useWhisperCpp: appSettings.useWhisperCppEngine,
+    );
+    if (resolvedWhisperPath == null) return false;
 
     // 2. Check Noise Cleaning (if enabled)
-    if (appSettings.noiseFilterEnabled && appSettings.noiseCleaningModel.isNotEmpty) {
-      final noiseReady = await modelManager.isModelDownloaded(appSettings.noiseCleaningModel);
+    if (appSettings.noiseFilterEnabled &&
+        appSettings.noiseCleaningModel.isNotEmpty) {
+      final noiseReady = await modelManager.isModelDownloaded(
+        appSettings.noiseCleaningModel,
+      );
       if (!noiseReady) return false;
     }
 
     // 3. Check NLP (if smart mode)
     if (appSettings.transcriptionStyle == TranscriptionStyle.smart) {
       if (appSettings.nlpModel.isEmpty) return false;
-      final llmReady = await modelManager.isModelDownloaded(appSettings.nlpModel);
+      final llmReady = await modelManager.isModelDownloaded(
+        appSettings.nlpModel,
+      );
       if (!llmReady) return false;
     }
 
@@ -124,10 +148,10 @@ class PipelineService {
     try {
       _currentStage = ProcessingStage.recording;
       _errorMessage = null;
-      
+
       // Load models in background as soon as we start recording
       _loadModelsInBackground();
-      
+
       await audioRecorder.startRecording();
     } catch (e) {
       _currentStage = ProcessingStage.error;
@@ -156,25 +180,42 @@ class PipelineService {
       String audioPath = recordingPath;
 
       // 2. Noise filtering
-      if (appSettings.noiseFilterEnabled && appSettings.noiseCleaningModel.isNotEmpty) {
+      if (appSettings.noiseFilterEnabled &&
+          appSettings.noiseCleaningModel.isNotEmpty) {
         _currentStage = ProcessingStage.noiseFiltering;
         onStageChanged?.call(_currentStage);
         debugPrint('Pipeline: Stage → Noise Filtering');
 
         try {
-          final info = ModelManagerService.models[appSettings.noiseCleaningModel];
-          final engine = (info?.format == ModelFormat.tflite) ? 'tflite' : 'deepfilternet';
-          final noiseModelPath = await modelManager.getModelPath(appSettings.noiseCleaningModel);
-          
+          final info =
+              ModelManagerService.models[appSettings.noiseCleaningModel];
+          final engine = (info?.format == ModelFormat.tflite)
+              ? 'tflite'
+              : 'deepfilternet';
+          final noiseModelPath = await modelManager.getModelPath(
+            appSettings.noiseCleaningModel,
+          );
+
           // Ensure correct noise model is initialized
           if (noiseFilter.loadedModelPath != noiseModelPath) {
-             debugPrint('Pipeline: Switching Noise model to ${appSettings.noiseCleaningModel} ($engine)');
-             await noiseFilter.initialize(modelPath: noiseModelPath, engine: engine);
+            debugPrint(
+              'Pipeline: Switching Noise model to ${appSettings.noiseCleaningModel} ($engine)',
+            );
+            await noiseFilter.initialize(
+              modelPath: noiseModelPath,
+              engine: engine,
+            );
           }
-          
-          audioPath = await noiseFilter.processAudioFile(recordingPath, modelPath: noiseModelPath, engine: engine);
+
+          audioPath = await noiseFilter.processAudioFile(
+            recordingPath,
+            modelPath: noiseModelPath,
+            engine: engine,
+          );
         } catch (e) {
-          debugPrint('Pipeline: Noise filtering error: $e. Falling back to original audio.');
+          debugPrint(
+            'Pipeline: Noise filtering error: $e. Falling back to original audio.',
+          );
           audioPath = recordingPath;
         }
       }
@@ -188,25 +229,30 @@ class PipelineService {
       final file = File(audioPath);
       final stats = await file.stat();
       debugPrint('Whisper: Input audio size: ${stats.size} bytes');
-      // No longer using noiseFilter.resampleTo16kHz because our native engine 
+      // No longer using noiseFilter.resampleTo16kHz because our native engine
       // now handles resampling and 32-bit float input internally with high quality.
 
       // Ensure the correct Whisper model is loaded
       final whisperKey = _mapWhisperModelKey(appSettings.whisperModel);
       final whisperPath = await modelManager.isModelDownloaded(whisperKey)
-          ? await modelManager.getModelPath(whisperKey)
+          ? transcription.resolveModelPathForEngine(
+              await modelManager.getModelPath(whisperKey),
+              useWhisperCpp: appSettings.useWhisperCppEngine,
+            )
           : null;
 
-      if (!transcription.isInitialized || 
+      if (!transcription.isInitialized ||
           transcription.activeModelName != appSettings.whisperModel ||
           transcription.activeModelPath != whisperPath) {
-        debugPrint('Pipeline: Switching STT model to ${appSettings.whisperModel}');
+        debugPrint(
+          'Pipeline: Switching STT model to ${appSettings.whisperModel}',
+        );
         await transcription.initialize(
           model: appSettings.whisperModel,
           modelPath: whisperPath,
+          useWhisperCpp: appSettings.useWhisperCppEngine,
         );
       }
-
 
       final rawText = await transcription.transcribe(audioPath);
 
@@ -225,11 +271,15 @@ class PipelineService {
 
         // Ensure the correct LLM model is loaded
         if (appSettings.nlpModel.isNotEmpty) {
-           final targetLlmPath = await modelManager.getModelPath(appSettings.nlpModel);
-           if (!llm.isModelLoaded || llm.loadedModelPath != targetLlmPath) {
-             debugPrint('Pipeline: Switching LLM model to ${appSettings.nlpModel}');
-             await llm.loadModel(targetLlmPath);
-           }
+          final targetLlmPath = await modelManager.getModelPath(
+            appSettings.nlpModel,
+          );
+          if (!llm.isModelLoaded || llm.loadedModelPath != targetLlmPath) {
+            debugPrint(
+              'Pipeline: Switching LLM model to ${appSettings.nlpModel}',
+            );
+            await llm.loadModel(targetLlmPath);
+          }
         }
 
         if (llm.isModelLoaded) {
@@ -250,14 +300,18 @@ class PipelineService {
       final processingTime = DateTime.now().difference(startTime);
 
       // Calculate audio duration from file
-      final audioDuration = audioRecorder.getRecordingDuration() ??
-          Duration.zero;
+      final audioDuration =
+          audioRecorder.getRecordingDuration() ?? Duration.zero;
 
       _currentStage = ProcessingStage.completed;
       onStageChanged?.call(_currentStage);
 
       // Clean up temp files
-      _cleanupTempFiles([recordingPath, filteredPath ?? '', resampledPath ?? '']);
+      _cleanupTempFiles([
+        recordingPath,
+        filteredPath ?? '',
+        resampledPath ?? '',
+      ]);
 
       return TranscriptionResult(
         rawText: rawText,
@@ -283,8 +337,8 @@ class PipelineService {
 
   /// Load models in background
   Future<void> _loadModelsInBackground() async {
-     debugPrint('Pipeline: Background model loading started...');
-     await initialize();
+    debugPrint('Pipeline: Background model loading started...');
+    await initialize();
   }
 
   /// Unload all models from memory
@@ -305,14 +359,18 @@ class PipelineService {
     final snippets = settings.getSnippets();
     var result = text;
     for (final snippet in snippets) {
-      result = result.replaceAll(snippet.triggerPhrase, snippet.templateContent);
+      result = result.replaceAll(
+        snippet.triggerPhrase,
+        snippet.templateContent,
+      );
     }
     return result;
   }
 
   /// Cleanup temporary audio files
   Future<void> _cleanupTempFiles(List<String> paths) async {
-    for (final path in paths.toSet()) { // Use set to avoid double deletion
+    for (final path in paths.toSet()) {
+      // Use set to avoid double deletion
       try {
         final file = File(path);
         if (await file.exists()) {
