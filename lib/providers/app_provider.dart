@@ -14,6 +14,7 @@ class AppProvider extends ChangeNotifier {
   final PipelineService _pipeline;
   final SettingsService _settings;
   final ModelManagerService _modelManager;
+  final bool _whisperCppCompatible;
 
   ProcessingStage _stage = ProcessingStage.idle;
   TranscriptionResult? _lastResult;
@@ -39,9 +40,11 @@ class AppProvider extends ChangeNotifier {
     required PipelineService pipeline,
     required SettingsService settings,
     required ModelManagerService modelManager,
+    required bool whisperCppCompatible,
   }) : _pipeline = pipeline,
        _settings = settings,
-       _modelManager = modelManager {
+       _modelManager = modelManager,
+       _whisperCppCompatible = whisperCppCompatible {
     // Sync initial active models from results of settings
     _syncActiveModelsFromSettings();
   }
@@ -71,6 +74,7 @@ class AppProvider extends ChangeNotifier {
   bool isModelDownloading(String modelId) =>
       _activeDownloadIds.contains(modelId);
   Map<String, String> get activeModels => _activeModels;
+  bool get isWhisperCppCompatible => _whisperCppCompatible;
 
   /// Get active model names for display
   Map<String, String> getActiveModelNames() {
@@ -225,6 +229,12 @@ class AppProvider extends ChangeNotifier {
       if (!_settings.isInitialized) {
         await _settings.initialize();
       }
+
+      if (!_whisperCppCompatible &&
+          _settings.getSettings().useWhisperCppEngine) {
+        await _settings.setUseWhisperCppEngine(false);
+      }
+
       await LoggingService().init();
 
       // Ensure local registry (models.json) exists at startup
@@ -648,6 +658,10 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> setUseWhisperCppEngine(bool enabled) async {
+    if (enabled && !_whisperCppCompatible) {
+      notifyListeners();
+      return;
+    }
     await _settings.setUseWhisperCppEngine(enabled);
     await _pipeline.initialize();
     notifyListeners();

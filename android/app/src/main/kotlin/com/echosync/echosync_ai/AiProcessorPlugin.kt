@@ -69,6 +69,7 @@ class AiProcessorPlugin(private val context: Context) : MethodChannel.MethodCall
                 }
             }
             "isAvailable" -> result.success(true)
+            "isWhisperCppCompatible" -> result.success(WhisperHardwareProbe.isWhisperCppCompatible())
             "resampleTo16kHz" -> {
                 val inputPath = call.argument<String>("inputPath")
                 val outputPath = call.argument<String>("outputPath")

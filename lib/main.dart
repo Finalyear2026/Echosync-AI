@@ -18,29 +18,30 @@ import 'package:echosync_ai/services/pipeline_service.dart';
 import 'package:echosync_ai/screens/home_screen.dart';
 import 'package:echosync_ai/theme/app_theme.dart';
 
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Set system UI style
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: AppTheme.surfaceDark,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: AppTheme.surfaceDark,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
 
   // Settings service initialize (finds path)
   final settings = SettingsService();
   await settings.initialize();
 
+  final whisperCppCompatible = await _checkWhisperCppCompatibility();
 
   // Request permissions
   await _requestPermissions();
 
   // Initialize services
 
-  
   final audioRecorder = AudioRecorderService();
   final noiseFilter = NoiseFilterService();
   final transcription = TranscriptionService();
@@ -62,10 +63,21 @@ void main() async {
         pipeline: pipeline,
         settings: settings,
         modelManager: modelManager,
+        whisperCppCompatible: whisperCppCompatible,
       )..initialize(),
       child: const EchoSyncApp(),
     ),
   );
+}
+
+Future<bool> _checkWhisperCppCompatibility() async {
+  const channel = MethodChannel('com.echosync.ai/deepfilternet');
+  try {
+    return await channel.invokeMethod<bool>('isWhisperCppCompatible') ?? false;
+  } catch (e) {
+    debugPrint('Whisper.cpp compatibility probe failed: $e');
+    return false;
+  }
 }
 
 Future<void> _requestPermissions() async {
