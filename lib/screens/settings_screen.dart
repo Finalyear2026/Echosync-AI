@@ -208,28 +208,24 @@ class _TranscriptionSettings extends StatelessWidget {
 
           _SettingsRow(
             label: 'Use whisper.cpp (.bin)',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Switch(
-                  value: settings.useWhisperCppEngine,
-                  onChanged: provider.isWhisperCppCompatible
-                      ? (value) => provider.setUseWhisperCppEngine(value)
-                      : null,
-                ),
-                if (!provider.isWhisperCppCompatible)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text(
-                      'whisper.cpp is incompatible with your device',
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-              ],
+            child: Switch(
+              value: settings.useWhisperCppEngine,
+              onChanged: provider.isWhisperCppCompatible
+                  ? (value) => provider.setUseWhisperCppEngine(value)
+                  : null,
             ),
           ),
+          if (!provider.isWhisperCppCompatible)
+            const Padding(
+              padding: EdgeInsets.only(top: 2, left: 2, right: 2, bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'whisper.cpp is incompatible with your device',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                ),
+              ),
+            ),
         ],
       ),
     );
