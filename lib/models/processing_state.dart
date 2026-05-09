@@ -1,3 +1,6 @@
+/// Processing mode: real-time streaming vs batch file-based
+enum ProcessingMode { realtime, batch }
+
 /// Processing pipeline state
 enum ProcessingStage {
   idle,

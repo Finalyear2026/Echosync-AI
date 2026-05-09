@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "build-llama/src",
+		"source" : "E:/application_softwares/.pub-cache/hosted/pub.dev/flutter_llama-1.1.2/llama.cpp/src"
+	}
+}

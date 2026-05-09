@@ -35,8 +35,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   whisper_flutter_new: 1.0.0
-  flutter_llama: ^1.1.2
+  flutter_llama:
+    path: vendor/flutter_llama
   record: ^6.2.0
+  sherpa_onnx: ^1.10.37
   path_provider: ^2.1.5
   provider: ^6.1.5+1
   permission_handler: ^12.0.1

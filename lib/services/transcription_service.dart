@@ -123,10 +123,19 @@ class TranscriptionService {
 
   /// Transcribe an audio file.
   /// Returns the transcription text.
+  ///
+  /// [language] defaults to `'en'`; explicit language skips whisper's
+  /// auto-detect pass (~300ms) and prevents mis-detection on short clips.
+  /// [speedUp] applies a 2x mean-filter to the mel spectrogram, roughly
+  /// halving inference time at ~5% accuracy cost — recommended for real-time.
+  /// [threads] controls BLAS/FFT parallelism; 6 is a good default for
+  /// modern phones with 6-8 cores.
   Future<String> transcribe(
     String audioPath, {
     String? language,
     bool translate = false,
+    bool speedUp = false,
+    int threads = 6,
   }) async {
     if (!_isInitialized) {
       throw StateError('Whisper is not initialized. Call initialize() first.');
@@ -151,8 +160,9 @@ class TranscriptionService {
           isTranslate: translate,
           isNoTimestamps: true,
           splitOnWord: true,
-          language: language ?? 'auto',
-          threads: 4,
+          language: language ?? 'en',
+          threads: threads,
+          speedUp: speedUp,
         ),
       );
 

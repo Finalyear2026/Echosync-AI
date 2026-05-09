@@ -1,0 +1,107 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 346,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 347,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 415,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"bin/libggml.so"
+			],
+			"targetId" : "ggml::@23533c6d68a59d54598d",
+			"targetIndex" : 1,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include",
+			"paths" : 
+			[
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-cpu.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-alloc.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-backend.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-blas.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-cann.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-cpp.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-cuda.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-opt.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-metal.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-rpc.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-virtgpu.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-sycl.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-vulkan.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-webgpu.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-zendnn.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/ggml-openvino.h",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml/include/gguf.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"bin/libggml-base.so"
+			],
+			"targetId" : "ggml-base::@23533c6d68a59d54598d",
+			"targetIndex" : 2,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/ggml",
+			"paths" : 
+			[
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/android/.cxx/Release/2o3m6r4u/arm64-v8a/build-llama/ggml/ggml-config.cmake",
+				"E:/current_work/project/echosync_ai/vendor/flutter_llama/android/.cxx/Release/2o3m6r4u/arm64-v8a/build-llama/ggml/ggml-version.cmake"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "build-llama/ggml",
+		"source" : "E:/current_work/project/echosync_ai/vendor/flutter_llama/llama.cpp/ggml"
+	}
+}

@@ -8,6 +8,8 @@ class AppSettings {
   String noiseCleaningModel;
   bool noiseFilterEnabled;
   bool useWhisperCppEngine;
+  ProcessingMode processingMode;
+  String realtimeModel;
 
   AppSettings({
     this.transcriptionStyle = TranscriptionStyle.smart,
@@ -17,6 +19,8 @@ class AppSettings {
     this.noiseCleaningModel = '',
     this.noiseFilterEnabled = true,
     this.useWhisperCppEngine = false,
+    this.processingMode = ProcessingMode.realtime,
+    this.realtimeModel = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -27,6 +31,8 @@ class AppSettings {
     'noiseCleaningModel': noiseCleaningModel,
     'noiseFilterEnabled': noiseFilterEnabled,
     'useWhisperCppEngine': useWhisperCppEngine,
+    'processingMode': processingMode.index,
+    'realtimeModel': realtimeModel,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -39,5 +45,8 @@ class AppSettings {
     noiseCleaningModel: json['noiseCleaningModel'] as String? ?? '',
     noiseFilterEnabled: json['noiseFilterEnabled'] as bool? ?? true,
     useWhisperCppEngine: json['useWhisperCppEngine'] as bool? ?? false,
+    processingMode:
+        ProcessingMode.values[json['processingMode'] as int? ?? 0],
+    realtimeModel: json['realtimeModel'] as String? ?? '',
   );
 }

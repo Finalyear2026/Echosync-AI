@@ -75,7 +75,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             // Status badge
                             _StatusBadge(provider: provider),
 
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
+
+                            // Processing mode toggle
+                            _ProcessingModeToggle(provider: provider),
+
+                            const SizedBox(height: 16),
 
                             // Active models mini-display
                             _ActiveModelsDisplay(
@@ -139,6 +144,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               _ErrorDisplay(
                                   message: provider.errorMessage!,
                                   onDismiss: () => provider.reset()),
+
+                            // Real-time partial transcript display — visible
+                            // during both recording and the subsequent
+                            // transcribing stage (inference from the last
+                            // timer tick may finish after stop() is called).
+                            if (provider.processingMode ==
+                                    ProcessingMode.realtime &&
+                                provider.partialText.isNotEmpty &&
+                                provider.stage !=
+                                    ProcessingStage.completed) ...[
+                              const SizedBox(height: 16),
+                              _RealtimePartialDisplay(
+                                text: provider.partialText,
+                              ),
+                            ],
 
                             // Result display
                             if (provider.lastResult != null &&
@@ -762,6 +782,176 @@ class _BreathingHighlightState extends State<_BreathingHighlight>
           ),
         );
       },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Processing Mode Toggle
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ProcessingModeToggle extends StatelessWidget {
+  final AppProvider provider;
+
+  const _ProcessingModeToggle({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final isBatch = provider.processingMode == ProcessingMode.batch;
+    final enabled = provider.isToggleEnabled;
+
+    return Tooltip(
+      message: enabled ? '' : 'Stop recording to change mode',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.07)),
+          ),
+          child: Row(
+            children: [
+              _ModeOption(
+                label: 'Real-time',
+                icon: Icons.stream_rounded,
+                selected: !isBatch,
+                enabled: enabled,
+                onTap: enabled
+                    ? () => provider.setProcessingMode(ProcessingMode.realtime)
+                    : null,
+              ),
+              _ModeOption(
+                label: 'Batch',
+                icon: Icons.queue_music_rounded,
+                selected: isBatch,
+                enabled: enabled,
+                onTap: enabled
+                    ? () => provider.setProcessingMode(ProcessingMode.batch)
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeOption extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  const _ModeOption({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor =
+        selected ? AppTheme.accentCyan : AppTheme.textMuted.withOpacity(0.5);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.accentCyan.withOpacity(0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: selected
+                ? Border.all(color: AppTheme.accentCyan.withOpacity(0.3))
+                : Border.all(color: Colors.transparent),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 15,
+                  color: enabled ? activeColor : activeColor.withOpacity(0.4)),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: enabled ? activeColor : activeColor.withOpacity(0.4),
+                  fontSize: 13,
+                  fontWeight:
+                      selected ? FontWeight.w700 : FontWeight.w500,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Real-time Partial Transcript Display
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RealtimePartialDisplay extends StatelessWidget {
+  final String text;
+
+  const _RealtimePartialDisplay({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.accentCyan.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.accentCyan.withOpacity(0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _PulseIcon(
+                    icon: Icons.graphic_eq_rounded,
+                    color: AppTheme.accentCyan),
+                const SizedBox(width: 8),
+                Text(
+                  'Live Transcript',
+                  style: TextStyle(
+                    color: AppTheme.accentCyan.withOpacity(0.8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              text,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 15,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

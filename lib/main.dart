@@ -15,6 +15,8 @@ import 'package:echosync_ai/services/llm_service.dart';
 import 'package:echosync_ai/services/model_manager_service.dart';
 import 'package:echosync_ai/services/settings_service.dart';
 import 'package:echosync_ai/services/pipeline_service.dart';
+import 'package:echosync_ai/services/streaming_audio_service.dart';
+import 'package:echosync_ai/services/asr/pipeline_coordinator.dart';
 import 'package:echosync_ai/screens/home_screen.dart';
 import 'package:echosync_ai/theme/app_theme.dart';
 
@@ -57,6 +59,14 @@ void main() async {
     modelManager: modelManager,
   );
 
+  final streamingAudio = StreamingAudioService();
+  final coordinator = PipelineCoordinator(
+    batchPipeline: pipeline,
+    settings: settings,
+    modelManager: modelManager,
+    streamingAudio: streamingAudio,
+  );
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppProvider(
@@ -64,6 +74,7 @@ void main() async {
         settings: settings,
         modelManager: modelManager,
         whisperCppCompatible: whisperCppCompatible,
+        coordinator: coordinator,
       )..initialize(),
       child: const EchoSyncApp(),
     ),

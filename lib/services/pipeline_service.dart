@@ -254,7 +254,11 @@ class PipelineService {
         );
       }
 
-      final rawText = await transcription.transcribe(audioPath);
+      final rawText = await transcription.transcribe(
+        audioPath,
+        language: 'en',
+        threads: 6,
+      );
 
       if (rawText.isEmpty) {
         throw Exception('No speech detected in the recording');

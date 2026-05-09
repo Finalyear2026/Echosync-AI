@@ -206,13 +206,19 @@ class _TranscriptionSettings extends StatelessWidget {
           ),
           Divider(color: Colors.white.withOpacity(0.06)),
 
-          _SettingsRow(
-            label: 'Use whisper.cpp (.bin)',
-            child: Switch(
-              value: settings.useWhisperCppEngine,
-              onChanged: provider.isWhisperCppCompatible
-                  ? (value) => provider.setUseWhisperCppEngine(value)
-                  : null,
+          Tooltip(
+            message: provider.isTfliteRealtimeBlocked
+                ? 'Engine selection applies to Batch mode only — Real-time uses Sherpa-ONNX'
+                : '',
+            child: _SettingsRow(
+              label: 'Use whisper.cpp for Batch ASR',
+              child: Switch(
+                value: settings.useWhisperCppEngine,
+                onChanged: (provider.isWhisperCppCompatible &&
+                        !provider.isTfliteRealtimeBlocked)
+                    ? (value) => provider.setUseWhisperCppEngine(value)
+                    : null,
+              ),
             ),
           ),
           if (!provider.isWhisperCppCompatible)
@@ -222,6 +228,17 @@ class _TranscriptionSettings extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'whisper.cpp is incompatible with your device',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                ),
+              ),
+            )
+          else if (provider.isTfliteRealtimeBlocked)
+            const Padding(
+              padding: EdgeInsets.only(top: 2, left: 2, right: 2, bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Real-time ASR uses Sherpa-ONNX — switch to Batch to change engine',
                   style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
                 ),
               ),

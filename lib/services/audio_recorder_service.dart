@@ -41,8 +41,8 @@ class AudioRecorderService {
 
     const config = RecordConfig(
       encoder: AudioEncoder.wav,
-      sampleRate: 48000,
-      bitRate: 768000, // 48000 * 16 * 1
+      sampleRate: 16000,
+      bitRate: 256000, // 16000 * 16 * 1
       numChannels: 1,
     );
 

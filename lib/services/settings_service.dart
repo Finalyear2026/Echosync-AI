@@ -142,6 +142,18 @@ class SettingsService {
     await saveSettings(settings);
   }
 
+  Future<void> setProcessingMode(ProcessingMode mode) async {
+    final settings = getSettings();
+    settings.processingMode = mode;
+    await saveSettings(settings);
+  }
+
+  Future<void> setRealtimeModel(String model) async {
+    final settings = getSettings();
+    settings.realtimeModel = model;
+    await saveSettings(settings);
+  }
+
   // --- Model Registry Sync ---
 
   String? getRegistryEtag() {

@@ -163,6 +163,9 @@ class ModelManagerService {
       'https://drive.google.com/uc?export=download&id=$fileId';
 
 static const Map<String, ModelInfo> models = {
+  // --- Real-time Streaming ASR ---
+  'sherpa-onnx-streaming-en-20m': ModelInfo(name: 'Sherpa-ONNX Zipformer EN 20M', filename: 'sherpa-onnx-streaming-en-20M', layout: ModelLayout.folder, format: ModelFormat.onnx),
+
   // --- Transcription (STT) ---
   'whisper-base': ModelInfo(name: 'Whisper Base', filename: 'whisper-base', layout: ModelLayout.folder, format: ModelFormat.tflite),
   'whisper-small': ModelInfo(name: 'Whisper Small', filename: 'whisper-small', layout: ModelLayout.folder, format: ModelFormat.tflite),

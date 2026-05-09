@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../models/dictionary_entry.dart';
@@ -8,6 +9,7 @@ import '../services/pipeline_service.dart';
 import '../services/settings_service.dart';
 import '../services/model_manager_service.dart';
 import '../services/logging_service.dart';
+import '../services/asr/pipeline_coordinator.dart';
 
 /// Main app state provider
 class AppProvider extends ChangeNotifier {
@@ -15,6 +17,7 @@ class AppProvider extends ChangeNotifier {
   final SettingsService _settings;
   final ModelManagerService _modelManager;
   final bool _whisperCppCompatible;
+  final PipelineCoordinator _coordinator;
 
   ProcessingStage _stage = ProcessingStage.idle;
   TranscriptionResult? _lastResult;
@@ -23,6 +26,9 @@ class AppProvider extends ChangeNotifier {
   Duration _recordingDuration = Duration.zero;
   final Map<String, bool> _modelStatuses = {};
   final Set<String> _pausedModels = {}; // Track models that are manually paused
+
+  String _partialText = '';
+  StreamSubscription<String>? _partialSub;
 
   // Cloud Registry
   List<dynamic> _cloudCategories = [];
@@ -41,10 +47,12 @@ class AppProvider extends ChangeNotifier {
     required SettingsService settings,
     required ModelManagerService modelManager,
     required bool whisperCppCompatible,
+    required PipelineCoordinator coordinator,
   }) : _pipeline = pipeline,
        _settings = settings,
        _modelManager = modelManager,
-       _whisperCppCompatible = whisperCppCompatible {
+       _whisperCppCompatible = whisperCppCompatible,
+       _coordinator = coordinator {
     // Sync initial active models from results of settings
     _syncActiveModelsFromSettings();
   }
@@ -52,6 +60,7 @@ class AppProvider extends ChangeNotifier {
   void _syncActiveModelsFromSettings() {
     final s = _settings.getSettings();
     _activeModels['stt'] = s.whisperModel;
+    _activeModels['stt_realtime'] = s.realtimeModel;
     _activeModels['nlp'] = s.nlpModel;
     _activeModels['noise_cleaning'] = s.noiseCleaningModel;
   }
@@ -75,6 +84,12 @@ class AppProvider extends ChangeNotifier {
       _activeDownloadIds.contains(modelId);
   Map<String, String> get activeModels => _activeModels;
   bool get isWhisperCppCompatible => _whisperCppCompatible;
+
+  ProcessingMode get processingMode => _settings.getSettings().processingMode;
+  bool get isToggleEnabled => !isRecording && !isProcessing;
+  bool get isTfliteRealtimeBlocked =>
+      processingMode == ProcessingMode.realtime;
+  String get partialText => _partialText;
 
   /// Get active model names for display
   Map<String, String> getActiveModelNames() {
@@ -119,6 +134,9 @@ class AppProvider extends ChangeNotifier {
             await _settings.updateWhisperModel(modelId);
             await _pipeline.initialize();
             break;
+          case 'stt_realtime':
+            await _settings.setRealtimeModel(modelId);
+            break;
           case 'nlp':
             await _settings.updateNLPModel(modelId);
             break;
@@ -154,6 +172,9 @@ class AppProvider extends ChangeNotifier {
             await _settings.updateWhisperModel('');
             await _pipeline.initialize();
             break;
+          case 'stt_realtime':
+            await _settings.setRealtimeModel('');
+            break;
           case 'nlp':
             await _settings.updateNLPModel('');
             break;
@@ -174,11 +195,18 @@ class AppProvider extends ChangeNotifier {
     return _activeModels[categoryId] == modelId;
   }
 
-  /// Check if every category has a model selected
+  /// Check if required categories for the current mode have a model selected.
+  ///
+  /// Real-time mode requires `stt_realtime` (sherpa); batch requires `stt`.
+  /// Both modes require `nlp` and `noise_cleaning`.
   bool get areAllModelsSelected {
     if (_cloudCategories.isEmpty) return false;
+    final isRealtime = processingMode == ProcessingMode.realtime;
     for (final category in _cloudCategories) {
       final categoryId = category['id'] as String;
+      // Skip the irrelevant STT category for the current mode
+      if (isRealtime && categoryId == 'stt') continue;
+      if (!isRealtime && categoryId == 'stt_realtime') continue;
       final activeId = _activeModels[categoryId];
       if (activeId == null || activeId.isEmpty) {
         return false;
@@ -187,11 +215,14 @@ class AppProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Get IDs of categories that don't have a model selected
+  /// Get IDs of categories that don't have a model selected, for current mode.
   List<String> getMissingCategoryIds() {
     final List<String> missing = [];
+    final isRealtime = processingMode == ProcessingMode.realtime;
     for (final category in _cloudCategories) {
       final categoryId = category['id'] as String;
+      if (isRealtime && categoryId == 'stt') continue;
+      if (!isRealtime && categoryId == 'stt_realtime') continue;
       final activeId = _activeModels[categoryId];
       if (activeId == null || activeId.isEmpty) {
         missing.add(categoryId);
@@ -230,9 +261,13 @@ class AppProvider extends ChangeNotifier {
         await _settings.initialize();
       }
 
-      if (!_whisperCppCompatible &&
-          _settings.getSettings().useWhisperCppEngine) {
-        await _settings.setUseWhisperCppEngine(false);
+      if (!_whisperCppCompatible) {
+        if (_settings.getSettings().useWhisperCppEngine) {
+          await _settings.setUseWhisperCppEngine(false);
+        }
+        if (_settings.getSettings().processingMode == ProcessingMode.realtime) {
+          await _settings.setProcessingMode(ProcessingMode.batch);
+        }
       }
 
       await LoggingService().init();
@@ -330,6 +365,9 @@ class AppProvider extends ChangeNotifier {
             case 'stt':
               await _settings.updateWhisperModel('');
               break;
+            case 'stt_realtime':
+              await _settings.setRealtimeModel('');
+              break;
             case 'nlp':
               await _settings.updateNLPModel('');
               break;
@@ -348,8 +386,14 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  /// Check if required models are downloaded
-  Future<bool> areModelsReady() => _pipeline.areModelsReady();
+  /// Check if required models are downloaded for the current mode.
+  Future<bool> areModelsReady() async {
+    if (processingMode == ProcessingMode.realtime) {
+      const sherpaKey = 'sherpa-onnx-streaming-en-20m';
+      return _modelManager.isModelDownloaded(sherpaKey);
+    }
+    return _pipeline.areModelsReady();
+  }
 
   /// Start/stop recording toggle
   Future<void> toggleRecording() async {
@@ -365,11 +409,17 @@ class AppProvider extends ChangeNotifier {
   Future<void> _startRecording() async {
     try {
       _errorMessage = null;
+      _partialText = '';
       _stage = ProcessingStage.recording;
       _recordingDuration = Duration.zero;
       notifyListeners();
 
-      await _pipeline.startRecording();
+      await _coordinator.startRecording();
+      await _partialSub?.cancel();
+      _partialSub = _coordinator.partialStream.listen((text) {
+        _partialText = text;
+        notifyListeners();
+      });
       _updateRecordingDuration();
     } catch (e) {
       _stage = ProcessingStage.error;
@@ -392,13 +442,15 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> _stopAndProcess() async {
     try {
-      final result = await _pipeline.stopAndProcess(
+      final result = await _coordinator.stopRecording(
         onStageChanged: (stage) {
           _stage = stage;
           notifyListeners();
         },
       );
-
+      await _partialSub?.cancel();
+      _partialSub = null;
+      _partialText = '';
       _lastResult = result;
       _stage = ProcessingStage.completed;
       notifyListeners();
@@ -411,7 +463,10 @@ class AppProvider extends ChangeNotifier {
 
   /// Cancel current recording
   Future<void> cancelRecording() async {
-    await _pipeline.cancelRecording();
+    await _coordinator.cancelRecording();
+    await _partialSub?.cancel();
+    _partialSub = null;
+    _partialText = '';
     _stage = ProcessingStage.idle;
     _errorMessage = null;
     _recordingDuration = Duration.zero;
@@ -424,6 +479,7 @@ class AppProvider extends ChangeNotifier {
     _stage = ProcessingStage.idle;
     _errorMessage = null;
     _lastResult = null;
+    _partialText = '';
     _recordingDuration = Duration.zero;
     notifyListeners();
   }
@@ -664,6 +720,16 @@ class AppProvider extends ChangeNotifier {
     }
     await _settings.setUseWhisperCppEngine(enabled);
     await _pipeline.initialize();
+    notifyListeners();
+  }
+
+  Future<void> setProcessingMode(ProcessingMode mode) async {
+    if (mode == ProcessingMode.realtime &&
+        !_settings.getSettings().useWhisperCppEngine) {
+      await _settings.setUseWhisperCppEngine(true);
+      await _pipeline.initialize();
+    }
+    await _settings.setProcessingMode(mode);
     notifyListeners();
   }
 
