@@ -11,6 +11,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -52,6 +53,9 @@ dependencies {
     // Support for flexible operators if needed by complex models
     implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.14.0")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    
+    // Core library desugaring for flutter_local_notifications
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
 
 flutter {

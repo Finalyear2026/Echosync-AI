@@ -8,6 +8,8 @@ import '../widgets/processing_indicator.dart';
 import '../widgets/transcription_display.dart';
 import 'settings_screen.dart';
 import 'models_screen.dart';
+import 'event_manager_screen.dart';
+import '../providers/event_provider.dart';
 
 
 /// Main home screen — single-page design with record button and result display.
@@ -190,16 +192,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       child: Row(
         children: [
           // Logo with Glow
           Container(
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               gradient: AppTheme.primaryGradient,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
                   color: AppTheme.primaryPurple.withOpacity(0.3),
@@ -211,10 +213,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Icon(
               Icons.graphic_eq_rounded,
               color: Colors.white,
-              size: 24,
+              size: 22,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -244,6 +246,23 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const Spacer(),
           // Action Buttons
+          Consumer<EventProvider>(
+            builder: (context, eventProvider, child) {
+              return _AppBarAction(
+                icon: Icons.event_note_rounded,
+                color: AppTheme.warning,
+                badgeCount: eventProvider.upcomingEventCount > 0 ? eventProvider.upcomingEventCount : null,
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const EventManagerScreen(),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          const SizedBox(width: 4),
           _AppBarAction(
             icon: Icons.cloud_queue_rounded,
             color: AppTheme.accentCyan,
@@ -255,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 4),
           _AppBarAction(
             icon: Icons.tune_rounded,
             color: AppTheme.textSecondary,
@@ -331,27 +350,60 @@ class _AppBarAction extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onPressed;
+  final int? badgeCount;
 
   const _AppBarAction({
     required this.icon,
     required this.color,
     required this.onPressed,
+    this.badgeCount,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: IconButton(
-        icon: Icon(icon, size: 20),
-        color: color,
-        onPressed: onPressed,
-        visualDensity: VisualDensity.compact,
-      ),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: IconButton(
+            icon: Icon(icon, size: 18),
+            color: color,
+            onPressed: onPressed,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+        ),
+        if (badgeCount != null)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.error,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.surfaceDark, width: 1.5),
+              ),
+              constraints: const BoxConstraints(minWidth: 18),
+              child: Text(
+                badgeCount! > 99 ? '99+' : badgeCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
