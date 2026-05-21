@@ -20,6 +20,7 @@ import 'package:echosync_ai/services/streaming_audio_service.dart';
 import 'package:echosync_ai/services/notification_service.dart';
 import 'package:echosync_ai/services/alarm_service.dart';
 import 'package:echosync_ai/services/asr/pipeline_coordinator.dart';
+import 'package:echosync_ai/services/logging_service.dart';
 import 'package:echosync_ai/screens/home_screen.dart';
 import 'package:echosync_ai/screens/event_detail_screen.dart';
 import 'package:echosync_ai/theme/app_theme.dart';
@@ -121,6 +122,12 @@ Future<void> _requestPermissions() async {
   
   // Request notification permissions
   await NotificationService().requestPermissions();
+  
+  // Request exact alarm permission (Android 12+)
+  final alarmStatus = await Permission.scheduleExactAlarm.status;
+  if (!alarmStatus.isGranted) {
+    await Permission.scheduleExactAlarm.request();
+  }
 }
 
 class EchoSyncApp extends StatefulWidget {
@@ -147,10 +154,80 @@ class _EchoSyncAppState extends State<EchoSyncApp> {
       onAlarmTrigger: _handleAlarmTrigger,
     );
     
-    // Reschedule all pending events
+    // Start foreground service immediately to prevent process killing on OEM devices (OPPO, Xiaomi, etc.)
+    AlarmService().startForegroundService();
+    
+    // Check permissions and reschedule events after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<EventProvider>().rescheduleAllPending();
+      _checkPermissionsAndReschedule();
     });
+  }
+  
+  Future<void> _checkPermissionsAndReschedule() async {
+    // Use the navigator context (inside MaterialApp) so showDialog has MaterialLocalizations.
+    final navContext = _navigatorKey.currentContext;
+    if (navContext == null) return;
+
+    // Step 1: Check battery optimization whitelist (critical for OPPO/ColorOS)
+    final isIgnoring = await AlarmService().isIgnoringBatteryOptimizations();
+    if (!isIgnoring && navContext.mounted) {
+      await showDialog<void>(
+        context: navContext,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Battery Optimization'),
+          content: const Text(
+            'EchoSync AI needs to be excluded from battery optimization to deliver alarms and notifications reliably.\n\n'
+            'On the next screen, find "EchoSync AI" and select "Don\'t optimize" (or "No restrictions").'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Skip'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await AlarmService().requestIgnoreBatteryOptimizations();
+              },
+              child: const Text('Fix Now'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Step 2: Check exact alarm permission (Android 12+)
+    final hasExactAlarmPermission = await AlarmService().canScheduleExactAlarms();
+    if (!hasExactAlarmPermission && navContext.mounted) {
+      final shouldOpenSettings = await showDialog<bool>(
+        context: navContext,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Alarm Permission Required'),
+          content: const Text(
+            'Please enable "Alarms & reminders" permission so alarms fire at the exact scheduled time.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Skip'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+      if (shouldOpenSettings == true) {
+        await AlarmService().openAlarmSettings();
+      }
+    }
+    
+    // Step 3: Reschedule all pending events
+    if (navContext.mounted) {
+      navContext.read<EventProvider>().rescheduleAllPending();
+    }
   }
 
   void _handleNotificationTap(String eventId) {

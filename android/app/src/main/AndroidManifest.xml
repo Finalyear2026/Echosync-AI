@@ -16,6 +16,12 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    
+    <!-- Battery optimization whitelist (lets app ask to be excluded from Doze/battery saver) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
+    <!-- Foreground service types for Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:label="EchoSync AI"
@@ -44,6 +50,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        
+        <!-- EchoSync Foreground Service (keeps process alive for alarms on aggressive OEMs) -->
+        <service
+            android:name=".EchoSyncForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         
         <!-- Alarm Manager Service -->
         <service

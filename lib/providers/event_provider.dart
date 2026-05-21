@@ -63,9 +63,9 @@ class EventProvider extends ChangeNotifier {
       // Save to database
       await _db.createEvent(event);
 
-      // Schedule notification if enabled
+      // Schedule notification via AlarmManager (reliable on OEM devices)
       if (event.hasNotification && event.notificationTime != null && event.isEnabled) {
-        await _notificationService.scheduleNotification(event);
+        await _alarmService.scheduleNotificationAlarm(event);
       }
 
       // Schedule alarm if enabled
@@ -108,6 +108,7 @@ class EventProvider extends ChangeNotifier {
 
       // Cancel existing notifications and alarms
       await _notificationService.cancelNotification(event.id);
+      await _alarmService.cancelNotificationAlarm(event.id);
       await _alarmService.cancelAlarm(event.id);
 
       // Update in database
@@ -116,7 +117,7 @@ class EventProvider extends ChangeNotifier {
       // Reschedule if enabled
       if (event.isEnabled) {
         if (event.hasNotification && event.notificationTime != null && !event.isNotificationAcknowledged) {
-          await _notificationService.scheduleNotification(event);
+          await _alarmService.scheduleNotificationAlarm(event);
         }
         if (event.hasAlarm && event.alarmTime != null && !event.isAlarmAcknowledged) {
           await _alarmService.scheduleAlarm(event);
@@ -145,6 +146,7 @@ class EventProvider extends ChangeNotifier {
     try {
       // Cancel notifications and alarms
       await _notificationService.cancelNotification(id);
+      await _alarmService.cancelNotificationAlarm(id);
       await _alarmService.cancelAlarm(id);
 
       // Delete from database
@@ -176,7 +178,7 @@ class EventProvider extends ChangeNotifier {
       if (newEnabled) {
         // Re-enable notifications and alarms
         if (event.hasNotification && event.notificationTime != null && !event.isNotificationAcknowledged) {
-          await _notificationService.scheduleNotification(event);
+          await _alarmService.scheduleNotificationAlarm(event);
         }
         if (event.hasAlarm && event.alarmTime != null && !event.isAlarmAcknowledged) {
           await _alarmService.scheduleAlarm(event);
@@ -184,6 +186,7 @@ class EventProvider extends ChangeNotifier {
       } else {
         // Cancel notifications and alarms
         await _notificationService.cancelNotification(id);
+        await _alarmService.cancelNotificationAlarm(id);
         await _alarmService.cancelAlarm(id);
       }
 
@@ -209,6 +212,7 @@ class EventProvider extends ChangeNotifier {
 
       // Cancel alarm if ringing
       await _alarmService.cancelAlarm(id);
+      await _alarmService.cancelNotificationAlarm(id);
 
       // Update database
       await _db.acknowledgeEvent(id);
@@ -222,7 +226,7 @@ class EventProvider extends ChangeNotifier {
         if (nextEvent != null) {
           await _db.createEvent(nextEvent);
           if (nextEvent.hasNotification && nextEvent.notificationTime != null) {
-            await _notificationService.scheduleNotification(nextEvent);
+            await _alarmService.scheduleNotificationAlarm(nextEvent);
           }
           if (nextEvent.hasAlarm && nextEvent.alarmTime != null) {
             await _alarmService.scheduleAlarm(nextEvent);
