@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useEchoSyncWS } from "./hooks/useEchoSyncWS";
+import { useNotifications } from "./hooks/useNotifications";
 import { StatusBar } from "./components/StatusBar";
 import { TranscriptPreview } from "./components/TranscriptPreview";
 import { HistoryView } from "./components/HistoryView";
@@ -11,7 +12,8 @@ interface ModelStatus {
 }
 
 function App() {
-  const { status, partialText, isFinal, lastResult, connected } = useEchoSyncWS();
+  const { status, partialText, isFinal, lastResult, connected, ws } = useEchoSyncWS();
+  useNotifications(ws);
   const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const [activeTab, setActiveTab] = useState<"assistant" | "history">("assistant");

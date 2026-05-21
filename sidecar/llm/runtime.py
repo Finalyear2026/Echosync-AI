@@ -96,7 +96,7 @@ class LLMRuntime:
 
     def __init__(self) -> None:
         self._model: Optional[object] = None  # llama_cpp.Llama instance
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._idle_timer: Optional[threading.Timer] = None
         self._high_ram: bool = _available_ram() >= RAM_THRESHOLD_BYTES
 

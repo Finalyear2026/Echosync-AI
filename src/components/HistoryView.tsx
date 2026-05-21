@@ -29,7 +29,7 @@ export function HistoryView() {
         setRecords(data);
         setLoading(false);
       })
-      .catch((err) => {
+      .catch(() => {
         setError("Could not load history.");
         setLoading(false);
       });

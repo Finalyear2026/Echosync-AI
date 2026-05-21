@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.websocket import manager
-from db.database import SessionLocal, init_db
+from db.database import SessionLocal, init_db, get_session
 from db import crud
 from models_dl.downloader import ModelDownloader
 from notifications.service import NotificationService
@@ -63,7 +63,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="EchoSync AI Sidecar", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "tauri://localhost",
+        "https://tauri.localhost",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -113,7 +118,7 @@ async def shutdown():
 async def session_start():
     global _audio_service, _router, _intent_engine, _stt_engine
     try:
-        if _audio_service and _audio_service._running:
+        if _audio_service and _audio_service.is_running:
             logger.warning("Session already active.")
             return {"status": "already_started"}
 
@@ -290,47 +295,31 @@ def _execute_intent(intent, session: Session):
 # --- Data endpoints ---
 
 @app.get("/tasks")
-def list_tasks():
-    db = SessionLocal()
-    try:
-        tasks = crud.get_tasks(db)
-        return [{"id": t.id, "title": t.title, "priority": t.priority,
-                 "status": t.status, "due_at": t.due_at, "created_at": t.created_at} for t in tasks]
-    finally:
-        db.close()
+def list_tasks(db: Session = Depends(get_session)):
+    tasks = crud.get_tasks(db)
+    return [{"id": t.id, "title": t.title, "priority": t.priority,
+             "status": t.status, "due_at": t.due_at, "created_at": t.created_at} for t in tasks]
 
 
 @app.get("/meetings")
-def list_meetings():
-    db = SessionLocal()
-    try:
-        meetings = crud.get_meetings(db)
-        return [{"id": m.id, "title": m.title, "start_at": m.start_at,
-                 "end_at": m.end_at, "attendees": m.attendees} for m in meetings]
-    finally:
-        db.close()
+def list_meetings(db: Session = Depends(get_session)):
+    meetings = crud.get_meetings(db)
+    return [{"id": m.id, "title": m.title, "start_at": m.start_at,
+             "end_at": m.end_at, "attendees": m.attendees} for m in meetings]
 
 
 @app.get("/reminders")
-def list_reminders():
-    db = SessionLocal()
-    try:
-        reminders = crud.get_reminders(db)
-        return [{"id": r.id, "message": r.message, "trigger_at": r.trigger_at,
-                 "status": r.status} for r in reminders]
-    finally:
-        db.close()
+def list_reminders(db: Session = Depends(get_session)):
+    reminders = crud.get_reminders(db)
+    return [{"id": r.id, "message": r.message, "trigger_at": r.trigger_at,
+             "status": r.status} for r in reminders]
 
 
 @app.get("/history")
-def list_history():
-    db = SessionLocal()
-    try:
-        records = crud.get_history(db)
-        return [{"id": h.id, "transcript": h.transcript, "intent_type": h.intent_type,
-                 "result_summary": h.result_summary, "session_at": h.session_at} for h in records]
-    finally:
-        db.close()
+def list_history(db: Session = Depends(get_session)):
+    records = crud.get_history(db)
+    return [{"id": h.id, "transcript": h.transcript, "intent_type": h.intent_type,
+             "result_summary": h.result_summary, "session_at": h.session_at} for h in records]
 
 
 # --- Model downloader ---

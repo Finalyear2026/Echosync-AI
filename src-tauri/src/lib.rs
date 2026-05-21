@@ -2,8 +2,10 @@
 // Manages sidecar lifecycle, health-check polling, graceful shutdown, and crash restart.
 
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, RunEvent};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, RunEvent, Manager};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_shell::process::CommandChild;
 
 const HEALTH_URL: &str = "http://127.0.0.1:8765/health";
 const SHUTDOWN_URL: &str = "http://127.0.0.1:8765/shutdown";
@@ -12,11 +14,14 @@ const RESTART_DELAY_MS: u64 = 2000;
 const HEALTH_POLL_INTERVAL_MS: u64 = 500;
 const HEALTH_TIMEOUT_SECS: u64 = 10;
 
+pub struct SidecarState(pub Mutex<Option<CommandChild>>);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
+        .manage(SidecarState(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -26,10 +31,11 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
+        .run(|app_handle, event| {
             if let RunEvent::ExitRequested { .. } = event {
+                let state = app_handle.state::<SidecarState>();
                 tauri::async_runtime::block_on(async {
-                    shutdown_sidecar().await;
+                    shutdown_sidecar(&state).await;
                 });
             }
         });
@@ -86,7 +92,11 @@ async fn spawn_sidecar(handle: &AppHandle) -> Result<bool, String> {
             return Ok(wait_for_health().await);
         }
         Ok(cmd) => {
-            cmd.spawn().map_err(|e| e.to_string())?;
+            let child = cmd.spawn().map_err(|e| e.to_string())?;
+            let state = handle.state::<SidecarState>();
+            if let Ok(mut guard) = state.0.lock() {
+                *guard = Some(child);
+            }
             Ok(wait_for_health().await)
         }
     }
@@ -116,15 +126,23 @@ async fn wait_for_health() -> bool {
     false
 }
 
-/// POST /shutdown and wait up to 5 seconds for graceful exit.
-async fn shutdown_sidecar() {
+/// POST /shutdown and wait up to 5 seconds for graceful exit, then kill if still running.
+async fn shutdown_sidecar(state: &SidecarState) {
     let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(3))
         .build()
     {
         Ok(c) => c,
         Err(_) => return,
     };
     let _ = client.post(SHUTDOWN_URL).send().await;
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+
+    // Check if we need to kill the process
+    if let Ok(mut guard) = state.0.lock() {
+        if let Some(child) = guard.take() {
+            eprintln!("EchoSync: force-killing sidecar process.");
+            let _ = child.kill();
+        }
+    }
 }

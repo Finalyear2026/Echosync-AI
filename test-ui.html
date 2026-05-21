@@ -1,149 +1,382 @@
 <!DOCTYPE html>
-<html>
+<html data-theme="dark">
 <head>
-    <title>EchoSync AI - Working Interface</title>
+    <title>EchoSync AI - Enhanced Interface</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root[data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-tertiary: #94a3b8;
+            --border-color: #475569;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-success: #10b981;
+            --accent-danger: #f43f5e;
+            --accent-warning: #f59e0b;
+            --shadow: rgba(0, 0, 0, 0.5);
+        }
+        
+        :root[data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f1f5f9;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-tertiary: #94a3b8;
+            --border-color: #e2e8f0;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-success: #10b981;
+            --accent-danger: #f43f5e;
+            --accent-warning: #f59e0b;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+        
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            background: #0a0a0a;
-            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
+            transition: all 0.3s ease;
         }
+        
         .container {
-            max-width: 600px;
+            max-width: 700px;
             width: 100%;
         }
+        
         .header {
             text-align: center;
             margin-bottom: 30px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
         }
+        
+        .header-content {
+            flex: 1;
+            text-align: center;
+        }
+        
         h1 {
-            font-size: 32px;
-            font-weight: 700;
+            font-size: 36px;
+            font-weight: 800;
             margin-bottom: 8px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
+        
         .subtitle {
-            color: #888;
+            color: var(--text-secondary);
             font-size: 14px;
+            font-weight: 500;
         }
+        
+        .theme-toggle {
+            flex-shrink: 0;
+            width: 60px;
+            height: 32px;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .theme-toggle:hover {
+            border-color: var(--accent-primary);
+            transform: scale(1.05);
+        }
+        
+        .theme-toggle-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-warning));
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .theme-toggle[data-theme="light"] .theme-toggle-slider {
+            left: 30px;
+            background: linear-gradient(135deg, #f59e0b, #f97316);
+        }
+        
         .status-bar {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 20px;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            box-shadow: 0 4px 12px var(--shadow);
+            transition: all 0.3s ease;
         }
+        
         .status-item {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            font-weight: 600;
         }
+        
         .status-dot {
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             animation: pulse 2s infinite;
+            box-shadow: 0 0 10px currentColor;
         }
-        .connected { background: #22c55e; }
-        .disconnected { background: #ef4444; animation: none; }
+        
+        .connected { 
+            background: var(--accent-success);
+            color: var(--accent-success);
+        }
+        
+        .disconnected { 
+            background: var(--accent-danger);
+            color: var(--accent-danger);
+            animation: none;
+        }
+        
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.95); }
         }
+        
         .card {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px var(--shadow);
+            transition: all 0.3s ease;
         }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px var(--shadow);
+        }
+        
+        .visualizer-container {
+            margin-bottom: 16px;
+            padding: 20px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            display: none;
+        }
+        
+        .visualizer-container.active {
+            display: block;
+        }
+        
+        .visualizer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            height: 60px;
+        }
+        
+        .bar {
+            width: 6px;
+            background: linear-gradient(180deg, var(--accent-primary), var(--accent-success));
+            border-radius: 3px;
+            transition: height 0.1s ease;
+            animation: wave 1s ease-in-out infinite;
+        }
+        
+        .bar:nth-child(1) { animation-delay: 0s; }
+        .bar:nth-child(2) { animation-delay: 0.1s; }
+        .bar:nth-child(3) { animation-delay: 0.2s; }
+        .bar:nth-child(4) { animation-delay: 0.3s; }
+        .bar:nth-child(5) { animation-delay: 0.4s; }
+        .bar:nth-child(6) { animation-delay: 0.3s; }
+        .bar:nth-child(7) { animation-delay: 0.2s; }
+        .bar:nth-child(8) { animation-delay: 0.1s; }
+        
+        @keyframes wave {
+            0%, 100% { height: 10px; }
+            50% { height: 50px; }
+        }
+        
         .transcript {
             min-height: 120px;
-            font-size: 16px;
-            line-height: 1.6;
-            color: #e5e5e5;
+            font-size: 18px;
+            line-height: 1.8;
+            color: var(--text-primary);
+            font-weight: 500;
         }
+        
         .transcript.empty {
-            color: #666;
+            color: var(--text-tertiary);
             font-style: italic;
+            font-weight: 400;
         }
+        
         button {
             width: 100%;
-            padding: 16px;
+            padding: 18px;
             border: none;
             border-radius: 12px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s ease;
             margin-bottom: 12px;
+            box-shadow: 0 4px 12px var(--shadow);
+            position: relative;
+            overflow: hidden;
         }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        button:active::before {
+            width: 300px;
+            height: 300px;
+        }
+        
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
+        
         .btn-primary {
-            background: #3b82f6;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
             color: white;
         }
+        
         .btn-primary:hover:not(:disabled) {
-            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--shadow);
         }
+        
         .btn-danger {
-            background: #ef4444;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
             color: white;
         }
+        
         .btn-danger:hover:not(:disabled) {
-            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
         }
+        
         .btn-secondary {
-            background: #374151;
-            color: white;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
         }
+        
         .btn-secondary:hover:not(:disabled) {
-            background: #4b5563;
+            background: var(--bg-secondary);
+            border-color: var(--accent-primary);
         }
+        
         .data-display {
-            background: #0a0a0a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 16px;
-            font-family: 'Courier New', monospace;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            font-family: 'Courier New', 'Monaco', monospace;
             font-size: 13px;
-            max-height: 300px;
+            max-height: 350px;
             overflow-y: auto;
             white-space: pre-wrap;
             word-wrap: break-word;
+            color: var(--text-primary);
         }
+        
+        .data-display::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .data-display::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+        
+        .data-display::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 4px;
+        }
+        
         .label {
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #888;
-            margin-bottom: 8px;
-            font-weight: 600;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            font-weight: 700;
         }
+        
         .button-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+        }
+        
+        @media (max-width: 600px) {
+            .button-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 16px;
+            }
+            
+            .theme-toggle {
+                margin: 0 auto;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>EchoSync AI</h1>
-            <p class="subtitle">Privacy-first offline voice assistant</p>
+            <div class="theme-toggle" onclick="toggleTheme()" data-theme="dark">
+                <div class="theme-toggle-slider">🌙</div>
+            </div>
+            <div class="header-content">
+                <h1>EchoSync AI</h1>
+                <p class="subtitle">Privacy-first offline voice assistant</p>
+            </div>
         </div>
         
         <div class="status-bar">
@@ -157,23 +390,36 @@
         </div>
         
         <div class="card">
+            <div class="visualizer-container" id="visualizer">
+                <div class="visualizer">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+            </div>
+            
             <div class="label">Transcript</div>
             <div class="transcript empty" id="transcript">Speak to see your transcript here...</div>
         </div>
         
         <button class="btn-primary" id="startBtn" onclick="startSession()">
-            Start Listening
+            🎤 Start Listening
         </button>
         
         <button class="btn-danger" id="stopBtn" onclick="stopSession()" style="display:none;">
-            Stop Listening
+            ⏹️ Stop Listening
         </button>
         
         <div class="button-grid">
-            <button class="btn-secondary" onclick="getTasks()">View Tasks</button>
-            <button class="btn-secondary" onclick="getMeetings()">View Meetings</button>
-            <button class="btn-secondary" onclick="getReminders()">View Reminders</button>
-            <button class="btn-secondary" onclick="getHistory()">View History</button>
+            <button class="btn-secondary" onclick="getTasks()">📋 View Tasks</button>
+            <button class="btn-secondary" onclick="getMeetings()">📅 View Meetings</button>
+            <button class="btn-secondary" onclick="getReminders()">⏰ View Reminders</button>
+            <button class="btn-secondary" onclick="getHistory()">📜 View History</button>
         </div>
         
         <div class="card">
@@ -186,6 +432,38 @@
         const API_BASE = 'http://127.0.0.1:8765';
         let ws = null;
         let sessionActive = false;
+
+        // Theme management
+        function toggleTheme() {
+            const html = document.documentElement;
+            const toggle = document.querySelector('.theme-toggle');
+            const slider = document.querySelector('.theme-toggle-slider');
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            toggle.setAttribute('data-theme', newTheme);
+            
+            if (newTheme === 'light') {
+                slider.textContent = '☀️';
+            } else {
+                slider.textContent = '🌙';
+            }
+            
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        const toggle = document.querySelector('.theme-toggle');
+        const slider = document.querySelector('.theme-toggle-slider');
+        if (toggle && slider) {
+            toggle.setAttribute('data-theme', savedTheme);
+            if (savedTheme === 'light') {
+                slider.textContent = '☀️';
+            }
+        }
 
         // WebSocket connection
         function connectWS() {
@@ -207,11 +485,11 @@
                 
                 if (msg.event === 'status_change') {
                     const statusMap = {
-                        'idle': 'Ready',
-                        'hearing': 'Hearing...',
-                        'transcribing': 'Transcribing...',
-                        'extracting': 'Extracting intent...',
-                        'thinking': 'Thinking...'
+                        'idle': '💤 Ready',
+                        'hearing': '👂 Hearing...',
+                        'transcribing': '✍️ Transcribing...',
+                        'extracting': '🔍 Extracting intent...',
+                        'thinking': '🤔 Thinking...'
                     };
                     document.getElementById('statusText').textContent = statusMap[msg.state] || msg.state;
                     
@@ -231,9 +509,10 @@
         async function startSession() {
             const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
+            const visualizer = document.getElementById('visualizer');
             
             startBtn.disabled = true;
-            startBtn.textContent = 'Starting... (may take 30 seconds)';
+            startBtn.textContent = '⏳ Starting... (may take 30 seconds)';
             
             try {
                 const res = await fetch(`${API_BASE}/session/start`, { 
@@ -246,6 +525,7 @@
                     sessionActive = true;
                     startBtn.style.display = 'none';
                     stopBtn.style.display = 'block';
+                    visualizer.classList.add('active');
                     document.getElementById('dataContent').textContent = JSON.stringify(data, null, 2);
                 } else {
                     throw new Error(data.status);
@@ -253,13 +533,14 @@
             } catch (err) {
                 alert('Error starting session: ' + err.message);
                 startBtn.disabled = false;
-                startBtn.textContent = 'Start Listening';
+                startBtn.textContent = '🎤 Start Listening';
             }
         }
 
         async function stopSession() {
             const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
+            const visualizer = document.getElementById('visualizer');
             
             try {
                 const res = await fetch(`${API_BASE}/session/stop`, { 
@@ -272,7 +553,8 @@
                 stopBtn.style.display = 'none';
                 startBtn.style.display = 'block';
                 startBtn.disabled = false;
-                startBtn.textContent = 'Start Listening';
+                startBtn.textContent = '🎤 Start Listening';
+                visualizer.classList.remove('active');
                 
                 document.getElementById('transcript').textContent = 'Speak to see your transcript here...';
                 document.getElementById('transcript').className = 'transcript empty';
@@ -287,9 +569,9 @@
                 const res = await fetch(`${API_BASE}/tasks`);
                 const data = await res.json();
                 document.getElementById('dataContent').textContent = 
-                    data.length === 0 ? 'No tasks yet' : JSON.stringify(data, null, 2);
+                    data.length === 0 ? '📋 No tasks yet' : JSON.stringify(data, null, 2);
             } catch (err) {
-                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+                document.getElementById('dataContent').textContent = '❌ Error: ' + err.message;
             }
         }
 
@@ -298,9 +580,9 @@
                 const res = await fetch(`${API_BASE}/meetings`);
                 const data = await res.json();
                 document.getElementById('dataContent').textContent = 
-                    data.length === 0 ? 'No meetings yet' : JSON.stringify(data, null, 2);
+                    data.length === 0 ? '📅 No meetings yet' : JSON.stringify(data, null, 2);
             } catch (err) {
-                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+                document.getElementById('dataContent').textContent = '❌ Error: ' + err.message;
             }
         }
 
@@ -309,9 +591,9 @@
                 const res = await fetch(`${API_BASE}/reminders`);
                 const data = await res.json();
                 document.getElementById('dataContent').textContent = 
-                    data.length === 0 ? 'No reminders yet' : JSON.stringify(data, null, 2);
+                    data.length === 0 ? '⏰ No reminders yet' : JSON.stringify(data, null, 2);
             } catch (err) {
-                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+                document.getElementById('dataContent').textContent = '❌ Error: ' + err.message;
             }
         }
 
@@ -320,9 +602,9 @@
                 const res = await fetch(`${API_BASE}/history`);
                 const data = await res.json();
                 document.getElementById('dataContent').textContent = 
-                    data.length === 0 ? 'No history yet' : JSON.stringify(data, null, 2);
+                    data.length === 0 ? '📜 No history yet' : JSON.stringify(data, null, 2);
             } catch (err) {
-                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+                document.getElementById('dataContent').textContent = '❌ Error: ' + err.message;
             }
         }
 
@@ -334,11 +616,11 @@
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'ok') {
-                    console.log('Backend is healthy');
+                    console.log('✅ Backend is healthy');
                 }
             })
             .catch(() => {
-                alert('Backend not running! Start it with: python sidecar/main.py');
+                alert('⚠️ Backend not running! Start it with: python sidecar/main.py');
             });
     </script>
 </body>

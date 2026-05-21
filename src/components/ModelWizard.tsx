@@ -16,7 +16,6 @@ export function ModelWizard({ missingModels, onComplete }: ModelWizardProps) {
   const [sourcePath, setSourcePath] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [downloads, setDownloads] = useState<Record<string, DownloadProgress>>({});
-  const [ws, setWs] = useState<WebSocket | null>(null);
 
   useEffect(() => {
     const socket = new WebSocket("ws://127.0.0.1:8765/ws/status");
@@ -48,7 +47,6 @@ export function ModelWizard({ missingModels, onComplete }: ModelWizardProps) {
         // ignore
       }
     };
-    setWs(socket);
     return () => socket.close();
   }, []);
 

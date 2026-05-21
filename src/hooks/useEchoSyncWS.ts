@@ -14,6 +14,7 @@ export interface WSState {
   isFinal: boolean;
   lastResult: string;
   connected: boolean;
+  ws: WebSocket | null;
 }
 
 const WS_URL = "ws://127.0.0.1:8765/ws/status";
@@ -26,6 +27,7 @@ export function useEchoSyncWS(): WSState {
     isFinal: false,
     lastResult: "",
     connected: false,
+    ws: null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -38,11 +40,11 @@ export function useEchoSyncWS(): WSState {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setState((s) => ({ ...s, connected: true }));
+      setState((s) => ({ ...s, connected: true, ws }));
     };
 
     ws.onclose = () => {
-      setState((s) => ({ ...s, connected: false }));
+      setState((s) => ({ ...s, connected: false, ws: null }));
       // Auto-reconnect
       reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY_MS);
     };

@@ -55,6 +55,11 @@ class AudioService:
     def on_partial_transcript(self, callback: Callable[[PartialTranscript], None]) -> None:
         self._on_partial = callback
 
+    @property
+    def is_running(self) -> bool:
+        """Return True if the audio capture loop is active."""
+        return self._running
+
     def start_capture(self) -> None:
         if self._running:
             logger.warning("AudioService already running.")
