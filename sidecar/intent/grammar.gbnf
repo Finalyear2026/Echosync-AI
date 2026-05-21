@@ -1,0 +1,47 @@
+root   ::= create-task | update-task | complete-task | schedule-meeting | set-reminder
+
+create-task ::= "{" ws
+    "\"intent_type\"" ws ":" ws "\"create_task\"" "," ws
+    "\"raw_transcript\"" ws ":" ws string "," ws
+    "\"title\"" ws ":" ws string
+    ( "," ws "\"priority\"" ws ":" ws priority )?
+    ( "," ws "\"due_at\"" ws ":" ws ( string | "null" ) )?
+    ws "}"
+
+update-task ::= "{" ws
+    "\"intent_type\"" ws ":" ws "\"update_task\"" "," ws
+    "\"raw_transcript\"" ws ":" ws string
+    ( "," ws "\"task_id\"" ws ":" ws number )?
+    ( "," ws "\"title_hint\"" ws ":" ws ( string | "null" ) )?
+    ( "," ws "\"priority\"" ws ":" ws ( priority | "null" ) )?
+    ( "," ws "\"due_at\"" ws ":" ws ( string | "null" ) )?
+    ws "}"
+
+complete-task ::= "{" ws
+    "\"intent_type\"" ws ":" ws "\"complete_task\"" "," ws
+    "\"raw_transcript\"" ws ":" ws string
+    ( "," ws "\"task_id\"" ws ":" ws number )?
+    ( "," ws "\"title_hint\"" ws ":" ws ( string | "null" ) )?
+    ws "}"
+
+schedule-meeting ::= "{" ws
+    "\"intent_type\"" ws ":" ws "\"schedule_meeting\"" "," ws
+    "\"raw_transcript\"" ws ":" ws string "," ws
+    "\"title\"" ws ":" ws string "," ws
+    "\"start_at\"" ws ":" ws string
+    ( "," ws "\"attendees\"" ws ":" ws string-array )?
+    ( "," ws "\"end_at\"" ws ":" ws ( string | "null" ) )?
+    ws "}"
+
+set-reminder ::= "{" ws
+    "\"intent_type\"" ws ":" ws "\"set_reminder\"" "," ws
+    "\"raw_transcript\"" ws ":" ws string "," ws
+    "\"message\"" ws ":" ws string "," ws
+    "\"trigger_at\"" ws ":" ws string
+    ws "}"
+
+priority     ::= "\"low\"" | "\"medium\"" | "\"high\""
+string       ::= "\"" ( [^"\\] | "\\" ( ["\\bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] ) )* "\""
+string-array ::= "[" ws ( string ( "," ws string )* )? ws "]"
+number       ::= [0-9]+
+ws           ::= [ \t\n\r]*
