@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EchoSync AI - Working Interface</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 14px;
+        }
+        .status-bar {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .connected { background: #22c55e; }
+        .disconnected { background: #ef4444; animation: none; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .transcript {
+            min-height: 120px;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #e5e5e5;
+        }
+        .transcript.empty {
+            color: #666;
+            font-style: italic;
+        }
+        button {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #2563eb;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: #dc2626;
+        }
+        .btn-secondary {
+            background: #374151;
+            color: white;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: #4b5563;
+        }
+        .data-display {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #888;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EchoSync AI</h1>
+            <p class="subtitle">Privacy-first offline voice assistant</p>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-dot" id="connDot"></span>
+                <span id="connStatus">Connecting...</span>
+            </div>
+            <div class="status-item">
+                <span id="statusText">Idle</span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="label">Transcript</div>
+            <div class="transcript empty" id="transcript">Speak to see your transcript here...</div>
+        </div>
+        
+        <button class="btn-primary" id="startBtn" onclick="startSession()">
+            Start Listening
+        </button>
+        
+        <button class="btn-danger" id="stopBtn" onclick="stopSession()" style="display:none;">
+            Stop Listening
+        </button>
+        
+        <div class="button-grid">
+            <button class="btn-secondary" onclick="getTasks()">View Tasks</button>
+            <button class="btn-secondary" onclick="getMeetings()">View Meetings</button>
+            <button class="btn-secondary" onclick="getReminders()">View Reminders</button>
+            <button class="btn-secondary" onclick="getHistory()">View History</button>
+        </div>
+        
+        <div class="card">
+            <div class="label">Data / Response</div>
+            <div class="data-display" id="dataContent">Click a button to see data...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8765';
+        let ws = null;
+        let sessionActive = false;
+
+        // WebSocket connection
+        function connectWS() {
+            ws = new WebSocket('ws://127.0.0.1:8765/ws/status');
+            
+            ws.onopen = () => {
+                document.getElementById('connStatus').textContent = 'Connected';
+                document.getElementById('connDot').className = 'status-dot connected';
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('connStatus').textContent = 'Disconnected';
+                document.getElementById('connDot').className = 'status-dot disconnected';
+                setTimeout(connectWS, 2000);
+            };
+            
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                
+                if (msg.event === 'status_change') {
+                    const statusMap = {
+                        'idle': 'Ready',
+                        'hearing': 'Hearing...',
+                        'transcribing': 'Transcribing...',
+                        'extracting': 'Extracting intent...',
+                        'thinking': 'Thinking...'
+                    };
+                    document.getElementById('statusText').textContent = statusMap[msg.state] || msg.state;
+                    
+                    if (msg.data && msg.data.result) {
+                        document.getElementById('dataContent').textContent = msg.data.result;
+                    }
+                }
+                
+                if (msg.event === 'partial_transcript') {
+                    const transcriptEl = document.getElementById('transcript');
+                    transcriptEl.textContent = msg.text || 'Listening...';
+                    transcriptEl.className = 'transcript';
+                }
+            };
+        }
+
+        async function startSession() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting... (may take 30 seconds)';
+            
+            try {
+                const res = await fetch(`${API_BASE}/session/start`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                
+                if (data.status === 'started' || data.status === 'already_started') {
+                    sessionActive = true;
+                    startBtn.style.display = 'none';
+                    stopBtn.style.display = 'block';
+                    document.getElementById('dataContent').textContent = JSON.stringify(data, null, 2);
+                } else {
+                    throw new Error(data.status);
+                }
+            } catch (err) {
+                alert('Error starting session: ' + err.message);
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Listening';
+            }
+        }
+
+        async function stopSession() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            try {
+                const res = await fetch(`${API_BASE}/session/stop`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                
+                sessionActive = false;
+                stopBtn.style.display = 'none';
+                startBtn.style.display = 'block';
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Listening';
+                
+                document.getElementById('transcript').textContent = 'Speak to see your transcript here...';
+                document.getElementById('transcript').className = 'transcript empty';
+                document.getElementById('dataContent').textContent = JSON.stringify(data, null, 2);
+            } catch (err) {
+                alert('Error stopping session: ' + err.message);
+            }
+        }
+
+        async function getTasks() {
+            try {
+                const res = await fetch(`${API_BASE}/tasks`);
+                const data = await res.json();
+                document.getElementById('dataContent').textContent = 
+                    data.length === 0 ? 'No tasks yet' : JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+            }
+        }
+
+        async function getMeetings() {
+            try {
+                const res = await fetch(`${API_BASE}/meetings`);
+                const data = await res.json();
+                document.getElementById('dataContent').textContent = 
+                    data.length === 0 ? 'No meetings yet' : JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+            }
+        }
+
+        async function getReminders() {
+            try {
+                const res = await fetch(`${API_BASE}/reminders`);
+                const data = await res.json();
+                document.getElementById('dataContent').textContent = 
+                    data.length === 0 ? 'No reminders yet' : JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+            }
+        }
+
+        async function getHistory() {
+            try {
+                const res = await fetch(`${API_BASE}/history`);
+                const data = await res.json();
+                document.getElementById('dataContent').textContent = 
+                    data.length === 0 ? 'No history yet' : JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('dataContent').textContent = 'Error: ' + err.message;
+            }
+        }
+
+        // Connect on load
+        connectWS();
+        
+        // Check backend health
+        fetch(`${API_BASE}/health`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    console.log('Backend is healthy');
+                }
+            })
+            .catch(() => {
+                alert('Backend not running! Start it with: python sidecar/main.py');
+            });
+    </script>
+</body>
+</html>
