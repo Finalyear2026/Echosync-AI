@@ -20,8 +20,12 @@
     <!-- Battery optimization whitelist (lets app ask to be excluded from Doze/battery saver) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     
+    <!-- Full-screen alarm overlay (shows over lock screen) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <!-- Foreground service types for Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:label="EchoSync AI"
@@ -37,7 +41,9 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -56,6 +62,12 @@
             android:name=".EchoSyncForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Alarm Ringtone Service (plays actual alarm sound + vibration) -->
+        <service
+            android:name=".AlarmRingtoneService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
         
         <!-- Alarm Manager Service -->
         <service

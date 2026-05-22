@@ -31,8 +31,26 @@ class AlarmService {
     IsolateNameServer.registerPortWithName(port.sendPort, _alarmPortName);
 
     port.listen((dynamic data) {
-      if (data is String && onAlarmTrigger != null) {
-        onAlarmTrigger(data);
+      String? eventId;
+      String title = 'Alarm';
+
+      if (data is Map) {
+        eventId = data['eventId'] as String?;
+        title = (data['title'] as String?) ?? 'Alarm';
+      } else if (data is String) {
+        // Legacy fallback
+        eventId = data;
+      }
+
+      if (eventId != null) {
+        // Start ringtone on main isolate — MethodChannel works here
+        _foregroundChannel
+            .invokeMethod<void>('startAlarmRingtone', {'title': title})
+            .catchError((e) => debugPrint('startAlarmRingtone error: $e'));
+
+        if (onAlarmTrigger != null) {
+          onAlarmTrigger(eventId);
+        }
       }
     });
 
@@ -48,8 +66,9 @@ class AlarmService {
     final title = params['title'] as String? ?? 'Alarm';
     final description = params['description'] as String?;
 
+    // Send both eventId and title to main isolate so it can start the ringtone
     final sendPort = IsolateNameServer.lookupPortByName(_alarmPortName);
-    sendPort?.send(eventId);
+    sendPort?.send({'eventId': eventId, 'title': title});
 
     _triggerAlarmEffect(eventId, title, description, isPersistent, isAlarm: true);
   }
@@ -241,7 +260,14 @@ class AlarmService {
   /// Acknowledge an alarm and stop it from ringing
   Future<void> acknowledgeAlarm(String eventId) async {
     await cancelAlarm(eventId);
-    
+
+    // Stop the native alarm ringtone
+    try {
+      await _foregroundChannel.invokeMethod('stopAlarmRingtone');
+    } catch (e) {
+      debugPrint('stopAlarmRingtone error: $e');
+    }
+
     // Update database
     final db = EventDatabaseService();
     await db.acknowledgeEvent(eventId);

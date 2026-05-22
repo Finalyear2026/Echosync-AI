@@ -47,6 +47,15 @@ class MainActivity : FlutterActivity() {
                         startActivity(intent)
                         result.success(true)
                     }
+                    "startAlarmRingtone" -> {
+                        val title = call.argument<String>("title") ?: "Alarm"
+                        AlarmRingtoneService.start(this, title)
+                        result.success(true)
+                    }
+                    "stopAlarmRingtone" -> {
+                        AlarmRingtoneService.stop(this)
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }

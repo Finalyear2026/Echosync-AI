@@ -210,8 +210,8 @@ class EventProvider extends ChangeNotifier {
       final event = await _db.getEvent(id);
       if (event == null) return;
 
-      // Cancel alarm if ringing
-      await _alarmService.cancelAlarm(id);
+      // Stop alarm ringtone, cancel scheduled alarms
+      await _alarmService.acknowledgeAlarm(id);
       await _alarmService.cancelNotificationAlarm(id);
 
       // Update database
