@@ -49,7 +49,8 @@ class MainActivity : FlutterActivity() {
                     }
                     "startAlarmRingtone" -> {
                         val title = call.argument<String>("title") ?: "Alarm"
-                        AlarmRingtoneService.start(this, title)
+                        val persistent = call.argument<Boolean>("persistent") ?: true
+                        AlarmRingtoneService.start(this, title, persistent)
                         result.success(true)
                     }
                     "stopAlarmRingtone" -> {

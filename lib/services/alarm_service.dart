@@ -33,10 +33,12 @@ class AlarmService {
     port.listen((dynamic data) {
       String? eventId;
       String title = 'Alarm';
+      bool persistent = true;
 
       if (data is Map) {
         eventId = data['eventId'] as String?;
         title = (data['title'] as String?) ?? 'Alarm';
+        persistent = (data['isPersistent'] as bool?) ?? true;
       } else if (data is String) {
         // Legacy fallback
         eventId = data;
@@ -45,7 +47,10 @@ class AlarmService {
       if (eventId != null) {
         // Start ringtone on main isolate — MethodChannel works here
         _foregroundChannel
-            .invokeMethod<void>('startAlarmRingtone', {'title': title})
+            .invokeMethod<void>('startAlarmRingtone', {
+              'title': title,
+              'persistent': persistent,
+            })
             .catchError((e) => debugPrint('startAlarmRingtone error: $e'));
 
         if (onAlarmTrigger != null) {
@@ -66,9 +71,9 @@ class AlarmService {
     final title = params['title'] as String? ?? 'Alarm';
     final description = params['description'] as String?;
 
-    // Send both eventId and title to main isolate so it can start the ringtone
+    // Send eventId, title and isPersistent to main isolate so it can start the ringtone
     final sendPort = IsolateNameServer.lookupPortByName(_alarmPortName);
-    sendPort?.send({'eventId': eventId, 'title': title});
+    sendPort?.send({'eventId': eventId, 'title': title, 'isPersistent': isPersistent});
 
     _triggerAlarmEffect(eventId, title, description, isPersistent, isAlarm: true);
   }
