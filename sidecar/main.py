@@ -213,7 +213,11 @@ async def _process_segment(wav_bytes: bytes):
         return
 
     # Re-transcribe the full segment for accuracy
-    result = _stt_engine.transcribe(wav_bytes)
+    import concurrent.futures
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        result = await loop.run_in_executor(pool, _stt_engine.transcribe, wav_bytes)
+        
     logger.info("Final transcript: '%s' (lang=%s, conf=%.2f)",
                 result.text, result.language_detected, result.confidence)
 
@@ -232,7 +236,9 @@ async def _process_segment(wav_bytes: bytes):
         try:
             if route == "command":
                 await manager.emit_status("extracting", {"transcript": result.text})
-                intent_result = _intent_engine.extract_intent(result.text)
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    intent_result = await loop.run_in_executor(pool, _intent_engine.extract_intent, result.text)
+                
                 if intent_result.success and intent_result.intent:
                     _execute_intent(intent_result.intent, db)
                     await manager.emit_status("idle", {"result": f"Done: {intent_result.intent.intent_type}"})
@@ -242,7 +248,8 @@ async def _process_segment(wav_bytes: bytes):
                 await manager.emit_status("thinking", {"transcript": result.text})
                 from agentic.engine import AgenticEngine
                 agentic = AgenticEngine(db)
-                response = agentic.run(result.text)
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    response = await loop.run_in_executor(pool, agentic.run, result.text)
                 await manager.emit_status("idle", {"result": response.answer})
 
             crud.insert_history(

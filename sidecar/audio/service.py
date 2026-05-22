@@ -216,8 +216,7 @@ class AudioService:
             except Exception as exc:
                 logger.debug("Partial callback error: %s", exc)
 
-    @staticmethod
-    def _frames_to_wav(frames: list[np.ndarray]) -> bytes:
+    def _frames_to_wav(self, frames: list[np.ndarray]) -> bytes:
         pcm = np.concatenate(frames).astype(np.int16)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:

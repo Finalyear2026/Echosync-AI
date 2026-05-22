@@ -4,7 +4,7 @@ Centralized settings for easy tuning without code changes.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ class STTConfig:
     """Speech-to-Text configuration."""
     
     # Model selection
-    model_size_small: str = "small"
+    model_size_small: str = "medium"
     model_size_medium: str = "medium"
     ram_threshold_gb: int = 8
     
@@ -23,9 +23,9 @@ class STTConfig:
     initial_prompt: str = "یہ اردو، پنجابی اور انگریزی میں بات چیت ہے۔ Roman Urdu bhi use ho sakti hai."
     
     # Speed vs accuracy tradeoff
-    beam_size_final: int = 3      # Higher = more accurate, slower (1-5)
+    beam_size_final: int = 5      # Higher = more accurate, slower (1-5)
     beam_size_partial: int = 1    # Keep at 1 for real-time
-    best_of_final: int = 3        # Higher = more accurate, slower (1-5)
+    best_of_final: int = 5        # Higher = more accurate, slower (1-5)
     best_of_partial: int = 1      # Keep at 1 for real-time
     
     # Quality thresholds
@@ -76,9 +76,9 @@ class AudioConfig:
 class AppConfig:
     """Application-wide configuration."""
     
-    stt: STTConfig = STTConfig()
-    vad: VADConfig = VADConfig()
-    audio: AudioConfig = AudioConfig()
+    stt: STTConfig = field(default_factory=STTConfig)
+    vad: VADConfig = field(default_factory=VADConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
     
     # Logging
     log_level: str = "INFO"

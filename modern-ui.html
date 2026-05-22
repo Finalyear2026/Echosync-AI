@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoSync AI - Modern Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-color: #05050a;
+            --glass-bg: rgba(20, 20, 30, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --danger: #ef4444;
+            --danger-glow: rgba(239, 68, 68, 0.5);
+            --success: #10b981;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* Animated Background Blobs */
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            z-index: -1;
+            animation: float 20s infinite ease-in-out;
+        }
+        .blob-1 {
+            top: -10vh; left: -10vw;
+            width: 40vw; height: 40vw;
+            background: #4f46e5;
+        }
+        .blob-2 {
+            bottom: -10vh; right: -10vw;
+            width: 50vw; height: 50vw;
+            background: #0ea5e9;
+            animation-delay: -5s;
+        }
+        .blob-3 {
+            top: 40vh; left: 50vw;
+            width: 30vw; height: 30vw;
+            background: #ec4899;
+            animation-delay: -10s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(3vw, -5vh) scale(1.1); }
+            66% { transform: translate(-3vw, 5vh) scale(0.9); }
+        }
+
+        /* Glassmorphism Classes */
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5vw;
+            box-shadow: 0 1vw 3vw rgba(0, 0, 0, 0.3);
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2vh 4vw;
+            margin: 2vh 2vw;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 1vw;
+        }
+        
+        .logo-text {
+            font-size: 2vw;
+            font-weight: 800;
+            background: linear-gradient(135deg, #e0e7ff, #7dd3fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.05vw;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.8vw;
+            padding: 0.8vh 1.5vw;
+            border-radius: 2vw;
+            font-size: 1vw;
+            font-weight: 600;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s;
+        }
+
+        .status-dot {
+            width: 0.8vw;
+            height: 0.8vw;
+            border-radius: 50%;
+            background: var(--text-secondary);
+        }
+        
+        .status-dot.connected { background: var(--success); box-shadow: 0 0 1vw var(--success); }
+        .status-dot.disconnected { background: var(--danger); box-shadow: 0 0 1vw var(--danger); }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            padding: 0 4vw;
+            gap: 3vw;
+            height: 60vh;
+        }
+
+        .transcript-container {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 4vw;
+            position: relative;
+        }
+
+        .transcript-text {
+            font-size: 2.5vw;
+            font-weight: 300;
+            line-height: 1.4;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .transcript-text.empty {
+            color: var(--text-secondary);
+            font-size: 2vw;
+        }
+
+        .visualizer {
+            display: flex;
+            align-items: center;
+            gap: 0.5vw;
+            height: 6vh;
+            margin-bottom: 2vh;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .visualizer.active { opacity: 1; }
+
+        .bar {
+            width: 0.4vw;
+            background: var(--accent);
+            border-radius: 0.2vw;
+            animation: wave 1s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% { height: 1vh; }
+            50% { height: 5vh; }
+        }
+        
+        .bar:nth-child(1) { animation-delay: 0s; }
+        .bar:nth-child(2) { animation-delay: 0.1s; }
+        .bar:nth-child(3) { animation-delay: 0.2s; }
+        .bar:nth-child(4) { animation-delay: 0.3s; }
+        .bar:nth-child(5) { animation-delay: 0.4s; }
+
+        /* Sidebar */
+        .sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5vh;
+            max-height: 100%;
+        }
+
+        .nav-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1vw;
+        }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            padding: 1.5vh 0;
+            border-radius: 0.8vw;
+            color: var(--text-primary);
+            font-size: 0.9vw;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+        }
+
+        .data-panel {
+            flex: 1;
+            padding: 2vw;
+            overflow-y: auto;
+            font-size: 0.9vw;
+            color: var(--text-secondary);
+        }
+
+        .data-panel::-webkit-scrollbar { width: 0.4vw; }
+        .data-panel::-webkit-scrollbar-track { background: transparent; }
+        .data-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 1vw; }
+
+        .data-item {
+            background: rgba(0,0,0,0.2);
+            padding: 1vw;
+            border-radius: 0.5vw;
+            margin-bottom: 1vh;
+            border-left: 0.2vw solid var(--accent);
+        }
+
+        /* Footer Controls */
+        .controls {
+            padding: 3vh 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 2vh;
+            position: relative;
+            gap: 2vh;
+        }
+
+        .mic-btn {
+            width: 5vw;
+            height: 5vw;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0.5vw 2vw rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .mic-btn::before {
+            content: '';
+            position: absolute;
+            top: -10%; left: -10%; right: -10%; bottom: -10%;
+            border-radius: 50%;
+            z-index: -1;
+            transition: all 0.4s;
+        }
+
+        .mic-start {
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+        }
+        
+        .mic-start:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 3vw var(--accent-glow);
+        }
+
+        .mic-stop {
+            background: linear-gradient(135deg, var(--danger), #be123c);
+            animation: pulse-danger 2s infinite;
+        }
+
+        .mic-stop:hover {
+            transform: scale(0.9);
+        }
+
+        @keyframes pulse-danger {
+            0% { box-shadow: 0 0 0 0 var(--danger-glow); }
+            70% { box-shadow: 0 0 0 2vw rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        
+        .mic-loading {
+            background: #475569;
+            cursor: not-allowed;
+        }
+        
+        .lucide-spin {
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .action-status {
+            font-size: 1vw;
+            color: var(--accent);
+            font-weight: 600;
+            opacity: 0;
+            transform: translateY(1vh);
+            transition: all 0.3s;
+            position: absolute;
+            top: -2vh;
+        }
+        
+        .action-status.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+
+    <header class="header glass">
+        <div class="logo-container">
+            <div class="logo-text">EchoSync AI</div>
+        </div>
+        <div class="status-pill">
+            <span class="status-dot" id="ws-indicator"></span>
+            <span id="ws-text">Connecting...</span>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="transcript-container glass">
+            <div class="visualizer" id="visualizer">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+            </div>
+            <div class="transcript-text empty" id="transcript">
+                Press the microphone to start...
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="nav-buttons">
+                <button class="nav-btn" onclick="fetchData('tasks')">Tasks</button>
+                <button class="nav-btn" onclick="fetchData('meetings')">Meetings</button>
+                <button class="nav-btn" onclick="fetchData('reminders')">Reminders</button>
+                <button class="nav-btn" onclick="fetchData('history')">History</button>
+            </div>
+            <div class="data-panel glass" id="data-panel">
+                Select a category above to view data.
+            </div>
+        </div>
+    </main>
+
+    <div class="controls">
+        <div class="action-status" id="action-status">Idle</div>
+        <button class="mic-btn mic-start" id="mic-btn" onclick="toggleSession()">
+            <i data-lucide="mic"></i>
+        </button>
+    </div>
+
+    <script>
+        // Initialize icons
+        lucide.createIcons();
+        const API_BASE = 'http://127.0.0.1:8765';
+        let ws = null;
+        let isSessionActive = false;
+        let isConnecting = false;
+
+        const micBtn = document.getElementById('mic-btn');
+        const transcriptEl = document.getElementById('transcript');
+        const visualizer = document.getElementById('visualizer');
+        const wsIndicator = document.getElementById('ws-indicator');
+        const wsText = document.getElementById('ws-text');
+        const actionStatus = document.getElementById('action-status');
+        const dataPanel = document.getElementById('data-panel');
+
+        function connectWS() {
+            ws = new WebSocket('ws://127.0.0.1:8765/ws/status');
+            
+            ws.onopen = () => {
+                wsIndicator.className = 'status-dot connected';
+                wsText.textContent = 'Connected';
+            };
+            
+            ws.onclose = () => {
+                wsIndicator.className = 'status-dot disconnected';
+                wsText.textContent = 'Disconnected';
+                setTimeout(connectWS, 2000);
+            };
+            
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                
+                if (msg.event === 'status_change') {
+                    const statusMap = {
+                        'idle': 'Ready',
+                        'hearing': 'Listening...',
+                        'transcribing': 'Transcribing...',
+                        'extracting': 'Extracting Details...',
+                        'thinking': 'Thinking...'
+                    };
+                    
+                    actionStatus.textContent = statusMap[msg.state] || msg.state;
+                    if (msg.state !== 'idle') {
+                        actionStatus.classList.add('show');
+                    } else {
+                        setTimeout(() => actionStatus.classList.remove('show'), 3000);
+                    }
+                }
+                
+                if (msg.event === 'partial_transcript') {
+                    transcriptEl.textContent = msg.text || '...';
+                    transcriptEl.classList.remove('empty');
+                }
+            };
+        }
+
+        async function toggleSession() {
+            if (isConnecting) return;
+
+            if (isSessionActive) {
+                // Stop Session
+                micBtn.className = 'mic-btn mic-loading';
+                micBtn.innerHTML = '<i data-lucide="loader-2" class="lucide-spin"></i>';
+                lucide.createIcons();
+                try {
+                    await fetch(`${API_BASE}/session/stop`, { method: 'POST' });
+                    isSessionActive = false;
+                    micBtn.className = 'mic-btn mic-start';
+                    micBtn.innerHTML = '<i data-lucide="mic"></i>';
+                    lucide.createIcons();
+                    visualizer.classList.remove('active');
+                } catch (e) {
+                    alert("Error stopping session.");
+                    micBtn.className = 'mic-btn mic-stop';
+                    micBtn.innerHTML = '<i data-lucide="square"></i>';
+                    lucide.createIcons();
+                }
+            } else {
+                // Start Session
+                isConnecting = true;
+                micBtn.className = 'mic-btn mic-loading';
+                micBtn.innerHTML = '<i data-lucide="loader-2" class="lucide-spin"></i>';
+                lucide.createIcons();
+                transcriptEl.textContent = "Starting AI Engine...";
+                transcriptEl.classList.add('empty');
+                
+                try {
+                    const res = await fetch(`${API_BASE}/session/start`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'started' || data.status === 'already_started') {
+                        isSessionActive = true;
+                        micBtn.className = 'mic-btn mic-stop';
+                        micBtn.innerHTML = '<i data-lucide="square"></i>';
+                        lucide.createIcons();
+                        visualizer.classList.add('active');
+                        transcriptEl.textContent = "I'm listening...";
+                    } else {
+                        throw new Error("Failed to start");
+                    }
+                } catch (e) {
+                    alert("Error starting session: " + e.message);
+                    micBtn.className = 'mic-btn mic-start';
+                    micBtn.innerHTML = '<i data-lucide="mic"></i>';
+                    lucide.createIcons();
+                } finally {
+                    isConnecting = false;
+                }
+            }
+        }
+
+        async function fetchData(endpoint) {
+            dataPanel.innerHTML = '<div style="text-align:center; padding:2vw;">Loading...</div>';
+            try {
+                const res = await fetch(`${API_BASE}/${endpoint}`);
+                const data = await res.json();
+                
+                if (data.length === 0) {
+                    dataPanel.innerHTML = `<div style="text-align:center; padding:2vw;">No ${endpoint} found.</div>`;
+                    return;
+                }
+
+                let html = '';
+                data.forEach(item => {
+                    html += `<div class="data-item">`;
+                    if (endpoint === 'tasks') {
+                        html += `<strong>${item.title}</strong><br>Priority: ${item.priority} | Status: ${item.status}`;
+                    } else if (endpoint === 'meetings') {
+                        html += `<strong>${item.title}</strong><br>${new Date(item.start_at).toLocaleString()} - ${new Date(item.end_at).toLocaleString()}`;
+                    } else if (endpoint === 'reminders') {
+                        html += `<strong>${item.message}</strong><br>Triggers at: ${new Date(item.trigger_at).toLocaleString()}`;
+                    } else if (endpoint === 'history') {
+                        html += `<em>"${item.transcript}"</em><br>Type: ${item.intent_type || 'Agentic'}`;
+                    }
+                    html += `</div>`;
+                });
+                dataPanel.innerHTML = html;
+            } catch (e) {
+                dataPanel.innerHTML = `<div style="text-align:center; color: var(--danger); padding:2vw;">Error fetching data.</div>`;
+            }
+        }
+
+        connectWS();
+    </script>
+</body>
+</html>
