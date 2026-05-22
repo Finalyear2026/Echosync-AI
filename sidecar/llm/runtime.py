@@ -334,4 +334,6 @@ def get_llm_runtime() -> LLMRuntime:
 
 
 # Module-level lock used only during singleton creation.
-_singleton_lock = threading.Lock()
+# Using RLock for consistency, though Lock would also work here since
+# there are no reentrant calls during singleton initialization.
+_singleton_lock = threading.RLock()

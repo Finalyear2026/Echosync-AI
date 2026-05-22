@@ -23,11 +23,9 @@ from typing import AsyncIterator, Awaitable, Callable
 import numpy as np
 import psutil
 
-logger = logging.getLogger(__name__)
+from config import config
 
-SAMPLE_RATE = 16000
-RAM_THRESHOLD_BYTES = 8 * 1024 ** 3
-PARTIAL_THROTTLE_SECONDS = 1.0  # max one partial update per second
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,13 +46,16 @@ class STTEngine:
 
     def __init__(self) -> None:
         self._model = None
+        self._sample_rate = config.audio.sample_rate
+        self._ram_threshold_bytes = config.stt.ram_threshold_gb * 1024 ** 3
         self._model_size = self._select_model_size()
         self._load_model()
 
-    @staticmethod
-    def _select_model_size() -> str:
+    def _select_model_size(self) -> str:
         available = psutil.virtual_memory().available
-        return "medium" if available >= RAM_THRESHOLD_BYTES else "small"
+        if available >= self._ram_threshold_bytes:
+            return config.stt.model_size_medium
+        return config.stt.model_size_small
 
     def _load_model(self) -> None:
         try:
@@ -98,8 +99,8 @@ class STTEngine:
                 model_path,
                 device=device,
                 compute_type=compute_type,
-                num_workers=4 if device == "cpu" else 1,  # Multi-threading for CPU
-                cpu_threads=4 if device == "cpu" else 0,
+                num_workers=config.stt.num_workers if device == "cpu" else 1,
+                cpu_threads=config.stt.cpu_threads if device == "cpu" else 0,
             )
             logger.info("faster-whisper model loaded successfully.")
         except Exception as exc:
@@ -126,26 +127,23 @@ class STTEngine:
             audio_array = _bytes_to_float32(audio_bytes)
 
             # Optimize parameters based on whether this is partial or final
-            beam_size = 1 if is_partial else 3  # Faster for partials, more accurate for final
-            best_of = 1 if is_partial else 3    # Single pass for partials
-            
-            # Initial prompt helps with Urdu/Roman Urdu accuracy
-            initial_prompt = "یہ اردو، پنجابی اور انگریزی میں بات چیت ہے۔ Roman Urdu bhi use ho sakti hai."
+            beam_size = config.stt.beam_size_partial if is_partial else config.stt.beam_size_final
+            best_of = config.stt.best_of_partial if is_partial else config.stt.best_of_final
 
             segments, info = self._model.transcribe(
                 audio_array,
-                language=None,  # Auto-detect language (supports English, Urdu, Punjabi)
+                language=config.stt.language if config.stt.language else None,
                 beam_size=beam_size,
                 best_of=best_of,
-                temperature=0.0,  # Deterministic output
-                compression_ratio_threshold=2.4,
-                log_prob_threshold=-1.0,
-                no_speech_threshold=0.6,
-                condition_on_previous_text=True,  # Better context for continuous speech
-                initial_prompt=initial_prompt,
-                word_timestamps=False,  # Faster without word-level timing
+                temperature=config.stt.temperature,
+                compression_ratio_threshold=config.stt.compression_ratio_threshold,
+                log_prob_threshold=config.stt.log_prob_threshold,
+                no_speech_threshold=config.stt.no_speech_threshold,
+                condition_on_previous_text=config.stt.condition_on_previous_text,
+                initial_prompt=config.stt.initial_prompt,
+                word_timestamps=False,
                 vad_filter=False,  # we handle VAD ourselves
-                without_timestamps=True,  # Faster text-only mode
+                without_timestamps=config.stt.without_timestamps,
             )
 
             segment_list = list(segments)
@@ -188,13 +186,14 @@ class STTEngine:
         """
         buffer = bytearray()
         last_emit_time = 0.0
-        window_bytes = SAMPLE_RATE * 2 * 2  # 2 seconds of int16 @ 16kHz
+        partial_interval = config.vad.partial_interval_seconds
+        window_bytes = self._sample_rate * 2 * 2  # 2 seconds of int16 @ 16kHz
 
         async for chunk in audio_stream:
             buffer.extend(chunk)
 
             now = time.monotonic()
-            if (now - last_emit_time) >= PARTIAL_THROTTLE_SECONDS and len(buffer) >= window_bytes:
+            if (now - last_emit_time) >= partial_interval and len(buffer) >= window_bytes:
                 window = bytes(buffer[-window_bytes:])
                 partial_result = self.transcribe(window, is_partial=True)  # Use fast mode for partials
                 if partial_result.text:

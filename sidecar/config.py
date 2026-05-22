@@ -3,7 +3,10 @@ EchoSync Configuration
 Centralized settings for easy tuning without code changes.
 """
 
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -89,32 +92,52 @@ config = AppConfig()
 
 def tune_for_speed():
     """Optimize for fastest transcription (lower accuracy)."""
+    logger.info("Applying speed optimization tuning")
     config.stt.beam_size_final = 1
     config.stt.best_of_final = 1
     config.stt.model_size_small = "tiny"
     config.vad.partial_window_frames = 100  # 3s window
+    logger.info(
+        "Speed tuning applied: beam_size=1, best_of=1, model=tiny, "
+        "partial_window=100 frames (3s)"
+    )
 
 
 def tune_for_accuracy():
     """Optimize for best accuracy (slower)."""
+    logger.info("Applying accuracy optimization tuning")
     config.stt.beam_size_final = 5
     config.stt.best_of_final = 5
     config.stt.model_size_small = "medium"
     config.vad.partial_window_frames = 267  # 8s window
+    logger.info(
+        "Accuracy tuning applied: beam_size=5, best_of=5, model=medium, "
+        "partial_window=267 frames (8s)"
+    )
 
 
 def tune_for_noisy_environment():
     """Optimize for noisy environments."""
+    logger.info("Applying noisy environment tuning")
     config.vad.energy_threshold = 250
     config.vad.speech_frames_min = 8
     config.stt.no_speech_threshold = 0.7
+    logger.info(
+        "Noisy environment tuning applied: energy_threshold=250, "
+        "speech_frames_min=8, no_speech_threshold=0.7"
+    )
 
 
 def tune_for_quiet_environment():
     """Optimize for quiet environments (sensitive mic)."""
+    logger.info("Applying quiet environment tuning")
     config.vad.energy_threshold = 80
     config.vad.speech_frames_min = 3
     config.stt.no_speech_threshold = 0.5
+    logger.info(
+        "Quiet environment tuning applied: energy_threshold=80, "
+        "speech_frames_min=3, no_speech_threshold=0.5"
+    )
 
 
 # Example usage:

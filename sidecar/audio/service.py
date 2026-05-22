@@ -18,21 +18,10 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from config import config
 from stt.engine import PartialTranscript
 
 logger = logging.getLogger(__name__)
-
-SAMPLE_RATE = 16000
-CHANNELS = 1
-DTYPE = "int16"
-FRAME_MS = 30
-FRAME_SAMPLES = int(SAMPLE_RATE * FRAME_MS / 1000)  # 480 samples
-
-# Energy-based VAD parameters
-ENERGY_THRESHOLD = 150      # Increased to reduce background noise capture
-SPEECH_FRAMES_MIN = 5       # minimum frames to start a segment (~150ms)
-SILENCE_FRAMES_END = 25     # frames of silence to end segment (~750ms)
-MAX_SEGMENT_FRAMES = 333    # max segment length (~10s)
 
 
 class AudioService:
@@ -48,6 +37,19 @@ class AudioService:
 
         self._on_segment: Optional[Callable[[bytes], None]] = None
         self._on_partial: Optional[Callable[[PartialTranscript], None]] = None
+        
+        # Load configuration
+        self._sample_rate = config.audio.sample_rate
+        self._channels = config.audio.channels
+        self._dtype = config.audio.dtype
+        self._frame_ms = config.audio.frame_ms
+        self._frame_samples = int(self._sample_rate * self._frame_ms / 1000)
+        
+        # VAD configuration
+        self._energy_threshold = config.vad.energy_threshold
+        self._speech_frames_min = config.vad.speech_frames_min
+        self._silence_frames_end = config.vad.silence_frames_end
+        self._max_segment_frames = config.vad.max_segment_frames
 
     def on_speech_segment(self, callback: Callable[[bytes], None]) -> None:
         self._on_segment = callback
@@ -79,10 +81,10 @@ class AudioService:
         self._processing_thread.start()
 
         self._stream = sd.InputStream(
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype=DTYPE,
-            blocksize=FRAME_SAMPLES,
+            samplerate=self._sample_rate,
+            channels=self._channels,
+            dtype=self._dtype,
+            blocksize=self._frame_samples,
             callback=self._audio_callback,
         )
         self._stream.start()
@@ -129,14 +131,14 @@ class AudioService:
                 break
 
             rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
-            is_speech = rms > ENERGY_THRESHOLD
+            is_speech = rms > self._energy_threshold
 
             if is_speech:
                 speech_count += 1
                 silence_count = 0
                 speech_buffer.append(frame)
 
-                if not in_speech and speech_count >= SPEECH_FRAMES_MIN:
+                if not in_speech and speech_count >= self._speech_frames_min:
                     in_speech = True
                     logger.info("Speech started (RMS=%.1f)", rms)
                     self._emit_partial(PartialTranscript(text="", is_final=False))
@@ -155,7 +157,7 @@ class AudioService:
                         last_partial_time = now
 
                 # Force end if segment too long
-                if len(speech_buffer) >= MAX_SEGMENT_FRAMES:
+                if len(speech_buffer) >= self._max_segment_frames:
                     logger.info("Max segment length reached, processing...")
                     self._finalize_segment(speech_buffer)
                     speech_buffer = []
@@ -169,7 +171,7 @@ class AudioService:
                     silence_count += 1
                     speech_buffer.append(frame)  # include trailing silence
 
-                    if silence_count >= SILENCE_FRAMES_END:
+                    if silence_count >= self._silence_frames_end:
                         logger.info("Speech ended (%d frames)", len(speech_buffer))
                         self._finalize_segment(speech_buffer)
                         speech_buffer = []
@@ -219,8 +221,8 @@ class AudioService:
         pcm = np.concatenate(frames).astype(np.int16)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
-            wf.setnchannels(CHANNELS)
+            wf.setnchannels(self._channels)
             wf.setsampwidth(2)
-            wf.setframerate(SAMPLE_RATE)
+            wf.setframerate(self._sample_rate)
             wf.writeframes(pcm.tobytes())
         return buf.getvalue()

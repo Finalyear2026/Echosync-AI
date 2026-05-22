@@ -82,22 +82,36 @@ async fn spawn_sidecar(handle: &AppHandle) -> Result<bool, String> {
     #[cfg(dev)]
     {
         eprintln!("EchoSync: dev mode — waiting for manually started sidecar...");
+        // In dev mode, we don't spawn the process, so we don't store a handle
         return Ok(wait_for_health().await);
     }
 
     #[cfg(not(dev))]
-    match handle.shell().sidecar("echosync-sidecar") {
-        Err(e) => {
-            eprintln!("EchoSync: sidecar not found: {}", e);
-            return Ok(wait_for_health().await);
-        }
-        Ok(cmd) => {
-            let child = cmd.spawn().map_err(|e| e.to_string())?;
-            let state = handle.state::<SidecarState>();
-            if let Ok(mut guard) = state.0.lock() {
-                *guard = Some(child);
+    {
+        match handle.shell().sidecar("echosync-sidecar") {
+            Err(e) => {
+                eprintln!("EchoSync: sidecar binary not found: {}", e);
+                eprintln!("EchoSync: falling back to manually started sidecar...");
+                return Ok(wait_for_health().await);
             }
-            Ok(wait_for_health().await)
+            Ok(cmd) => {
+                eprintln!("EchoSync: spawning sidecar process...");
+                let child = cmd.spawn().map_err(|e| {
+                    eprintln!("EchoSync: failed to spawn sidecar: {}", e);
+                    e.to_string()
+                })?;
+                
+                // Store the child handle for clean shutdown
+                let state = handle.state::<SidecarState>();
+                if let Ok(mut guard) = state.0.lock() {
+                    *guard = Some(child);
+                    eprintln!("EchoSync: sidecar process handle stored for clean shutdown.");
+                } else {
+                    eprintln!("EchoSync: warning - failed to store sidecar handle!");
+                }
+                
+                Ok(wait_for_health().await)
+            }
         }
     }
 }
@@ -128,21 +142,55 @@ async fn wait_for_health() -> bool {
 
 /// POST /shutdown and wait up to 5 seconds for graceful exit, then kill if still running.
 async fn shutdown_sidecar(state: &SidecarState) {
+    eprintln!("EchoSync: initiating sidecar shutdown...");
+    
+    // First, try graceful shutdown via HTTP
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()
     {
         Ok(c) => c,
-        Err(_) => return,
+        Err(e) => {
+            eprintln!("EchoSync: failed to create HTTP client: {}", e);
+            // Skip HTTP shutdown, go straight to kill
+            force_kill_sidecar(state).await;
+            return;
+        }
     };
-    let _ = client.post(SHUTDOWN_URL).send().await;
+    
+    match client.post(SHUTDOWN_URL).send().await {
+        Ok(resp) => {
+            eprintln!("EchoSync: shutdown request sent (status: {})", resp.status());
+        }
+        Err(e) => {
+            eprintln!("EchoSync: shutdown request failed: {}", e);
+        }
+    }
+    
+    // Wait for graceful shutdown
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
-    // Check if we need to kill the process
+    // Force kill if still running
+    force_kill_sidecar(state).await;
+}
+
+/// Force kill the sidecar process if it's still running.
+async fn force_kill_sidecar(state: &SidecarState) {
     if let Ok(mut guard) = state.0.lock() {
-        if let Some(child) = guard.take() {
-            eprintln!("EchoSync: force-killing sidecar process.");
-            let _ = child.kill();
+        if let Some(mut child) = guard.take() {
+            eprintln!("EchoSync: force-killing sidecar process...");
+            match child.kill() {
+                Ok(_) => {
+                    eprintln!("EchoSync: sidecar process killed successfully.");
+                }
+                Err(e) => {
+                    eprintln!("EchoSync: failed to kill sidecar process: {}", e);
+                }
+            }
+        } else {
+            eprintln!("EchoSync: no sidecar process handle to kill (dev mode or manual start).");
         }
+    } else {
+        eprintln!("EchoSync: failed to acquire lock on sidecar state.");
     }
 }

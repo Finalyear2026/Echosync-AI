@@ -14,16 +14,11 @@ from typing import Literal
 
 import numpy as np
 
+from config import config
+
 logger = logging.getLogger(__name__)
 
 VADEvent = Literal["speech_start", "speech_end"]
-
-# Silero VAD constants
-SAMPLE_RATE = 16000
-FRAME_MS = 30  # 30ms frames
-FRAME_SAMPLES = int(SAMPLE_RATE * FRAME_MS / 1000)  # 480 samples
-SPEECH_THRESHOLD = 0.2  # lowered for low-volume microphones
-SILENCE_WINDOW_MS = 700  # ms of silence before speech_end
 
 
 class VADEngine:
@@ -39,6 +34,14 @@ class VADEngine:
         self._last_speech_time: float = 0.0
         self._h = np.zeros((2, 1, 64), dtype=np.float32)
         self._c = np.zeros((2, 1, 64), dtype=np.float32)
+        
+        # Load configuration
+        self._sample_rate = config.audio.sample_rate
+        self._frame_ms = config.audio.frame_ms
+        self._frame_samples = int(self._sample_rate * self._frame_ms / 1000)
+        self._speech_threshold = config.vad.silero_threshold
+        self._silence_window_ms = config.vad.silero_silence_window_ms
+        
         self._load_model()
 
     def _load_model(self) -> None:
@@ -78,7 +81,7 @@ class VADEngine:
             # Silero VAD expects float32 normalized audio in shape (1, samples)
             audio = frame.astype(np.float32) / 32768.0  # normalize int16 to [-1, 1]
             audio = audio.reshape(1, -1)
-            sr = np.array(SAMPLE_RATE, dtype=np.int64)
+            sr = np.array(self._sample_rate, dtype=np.int64)
 
             # Reset hidden states if needed
             ort_inputs = {
@@ -119,7 +122,7 @@ class VADEngine:
         prob = self._predict_onnx(frame)
         now = time.monotonic()
 
-        if prob >= SPEECH_THRESHOLD:
+        if prob >= self._speech_threshold:
             self._last_speech_time = now
             if self._state == "idle":
                 self._state = "active"
@@ -128,7 +131,7 @@ class VADEngine:
         else:
             if self._state == "active":
                 silence_ms = (now - self._last_speech_time) * 1000
-                if silence_ms >= SILENCE_WINDOW_MS:
+                if silence_ms >= self._silence_window_ms:
                     self._state = "idle"
                     logger.debug(
                         "VAD: speech_end (silence=%.0fms)", silence_ms

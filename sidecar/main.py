@@ -61,16 +61,34 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="EchoSync AI Sidecar", version="0.1.0", lifespan=lifespan)
+
+# CORS configuration: Restrict to Tauri and localhost origins only
+# This prevents unauthorized web pages from accessing the sidecar API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:1420",
-        "http://127.0.0.1:1420",
+        # Tauri app origins
         "tauri://localhost",
         "https://tauri.localhost",
+        # Localhost origins for development/testing
+        "http://localhost:1420",      # Tauri dev server
+        "http://127.0.0.1:1420",      # Tauri dev server (IP)
+        "http://localhost:5173",      # Vite dev server
+        "http://127.0.0.1:5173",      # Vite dev server (IP)
+        "http://localhost:8080",      # Alternative dev port
+        "http://127.0.0.1:8080",      # Alternative dev port (IP)
+        "null",                        # file:// URLs send "null" as origin
     ],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+    ],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
 
 
@@ -209,34 +227,33 @@ async def _process_segment(wav_bytes: bytes):
     route = _router.classify(result.text)
     logger.info("Route: %s", route)
 
-    db = SessionLocal()
-    try:
-        if route == "command":
-            await manager.emit_status("extracting", {"transcript": result.text})
-            intent_result = _intent_engine.extract_intent(result.text)
-            if intent_result.success and intent_result.intent:
-                _execute_intent(intent_result.intent, db)
-                await manager.emit_status("idle", {"result": f"Done: {intent_result.intent.intent_type}"})
+    # Use context manager for proper session handling
+    with SessionLocal() as db:
+        try:
+            if route == "command":
+                await manager.emit_status("extracting", {"transcript": result.text})
+                intent_result = _intent_engine.extract_intent(result.text)
+                if intent_result.success and intent_result.intent:
+                    _execute_intent(intent_result.intent, db)
+                    await manager.emit_status("idle", {"result": f"Done: {intent_result.intent.intent_type}"})
+                else:
+                    await manager.emit_status("idle", {"result": result.text})
             else:
-                await manager.emit_status("idle", {"result": result.text})
-        else:
-            await manager.emit_status("thinking", {"transcript": result.text})
-            from agentic.engine import AgenticEngine
-            agentic = AgenticEngine(db)
-            response = agentic.run(result.text)
-            await manager.emit_status("idle", {"result": response.answer})
+                await manager.emit_status("thinking", {"transcript": result.text})
+                from agentic.engine import AgenticEngine
+                agentic = AgenticEngine(db)
+                response = agentic.run(result.text)
+                await manager.emit_status("idle", {"result": response.answer})
 
-        crud.insert_history(
-            db,
-            transcript=result.text,
-            intent_type=route if route == "command" else None,
-            result_summary="processed",
-        )
-    except Exception as exc:
-        logger.error("Pipeline processing error: %s", exc, exc_info=True)
-        await manager.emit_status("idle", {"result": result.text})
-    finally:
-        db.close()
+            crud.insert_history(
+                db,
+                transcript=result.text,
+                intent_type=route if route == "command" else None,
+                result_summary="processed",
+            )
+        except Exception as exc:
+            logger.error("Pipeline processing error: %s", exc, exc_info=True)
+            await manager.emit_status("idle", {"result": result.text})
 
 
 def _execute_intent(intent, session: Session):
