@@ -15,17 +15,17 @@ class STTConfig:
     
     # Model selection
     model_size_small: str = "medium"
-    model_size_medium: str = "medium"
+    model_size_medium: str = "large-v2"  # Upgraded for better accuracy
     ram_threshold_gb: int = 8
     
     # Transcription parameters
     language: str = "ur"  # Urdu
-    initial_prompt: str = "یہ اردو، پنجابی اور انگریزی میں بات چیت ہے۔ Roman Urdu bhi use ho sakti hai."
+    initial_prompt: str = "یہ اردو، پنجابی اور انگریزی میں بات چیت ہے۔ Roman Urdu bhi use ho sakti hai. Task bana do. Meeting schedule karo. Reminder set karo."
     
     # Speed vs accuracy tradeoff
-    beam_size_final: int = 5      # Higher = more accurate, slower (1-5)
+    beam_size_final: int = 2      # Balanced: faster with good accuracy (1-5)
     beam_size_partial: int = 1    # Keep at 1 for real-time
-    best_of_final: int = 5        # Higher = more accurate, slower (1-5)
+    best_of_final: int = 2        # Match beam_size for consistency (1-5)
     best_of_partial: int = 1      # Keep at 1 for real-time
     
     # Quality thresholds
@@ -49,17 +49,17 @@ class VADConfig:
     
     # Energy-based VAD
     energy_threshold: int = 150           # RMS threshold (50-500)
-    speech_frames_min: int = 5            # Min frames to start (~150ms)
-    silence_frames_end: int = 25          # Frames to end (~750ms)
-    max_segment_frames: int = 333         # Max segment (~10s)
+    speech_frames_min: int = 3            # Min frames to start (~90ms) - faster detection
+    silence_frames_end: int = 15          # Frames to end (~450ms) - faster cutoff
+    max_segment_frames: int = 200         # Max segment (~6s) - shorter segments for faster response
     
     # Silero VAD (if available)
     silero_threshold: float = 0.2         # Speech probability (0.0-1.0)
-    silero_silence_window_ms: int = 700   # Silence duration to end
+    silero_silence_window_ms: int = 500   # Silence duration to end - faster
     
     # Partial transcript timing
-    partial_interval_seconds: float = 2.0  # How often to emit partials
-    partial_window_frames: int = 200       # Context window (~6s)
+    partial_interval_seconds: float = 1.5  # Show partials faster (was 2.0)
+    partial_window_frames: int = 150       # Context window (~4.5s) - smaller for speed
 
 
 @dataclass

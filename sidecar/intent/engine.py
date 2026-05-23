@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -60,8 +61,12 @@ class IntentEngine:
         try:
             from llama_cpp import LlamaGrammar  # type: ignore[import]
             if GRAMMAR_PATH.exists():
-                self._grammar = LlamaGrammar.from_file(str(GRAMMAR_PATH))
-                logger.info("GBNF grammar loaded from %s", GRAMMAR_PATH)
+                try:
+                    self._grammar = LlamaGrammar.from_file(str(GRAMMAR_PATH))
+                    logger.info("GBNF grammar loaded from %s", GRAMMAR_PATH)
+                except Exception as grammar_exc:
+                    logger.warning("Failed to parse GBNF grammar: %s. Will use simple extraction.", grammar_exc)
+                    self._grammar = None
             else:
                 logger.warning("Grammar file not found at %s", GRAMMAR_PATH)
         except Exception as exc:
@@ -71,8 +76,8 @@ class IntentEngine:
         """
         Extract a structured intent from a transcript.
 
-        Retries up to MAX_RETRIES times on grammar/schema violation.
-        Falls back to simple rule-based extraction if LLM is not available.
+        Uses simple rule-based extraction for reliability and speed.
+        Falls back to LLM only if simple extraction fails and LLM is available.
 
         Args:
             transcript: The voice transcript to parse.
@@ -81,6 +86,14 @@ class IntentEngine:
             IntentResult with success=True and a validated intent, or
             IntentResult with success=False and an error message.
         """
+        # Try simple extraction first (fast and reliable)
+        logger.info("Attempting simple rule-based extraction")
+        simple_result = self._extract_simple(transcript)
+        if simple_result.success:
+            return simple_result
+        
+        # Fallback to LLM if simple extraction failed
+        logger.info("Simple extraction failed, trying LLM fallback")
         from llm.runtime import get_llm_runtime
 
         runtime = get_llm_runtime()
@@ -90,72 +103,17 @@ class IntentEngine:
             try:
                 runtime.load()
             except (FileNotFoundError, Exception) as exc:
-                logger.warning("LLM not available: %s. Using simple rule-based extraction.", exc)
-                return self._extract_simple(transcript)
+                logger.warning("LLM not available: %s. Simple extraction already failed.", exc)
+                return IntentResult(
+                    success=False,
+                    intent=None,
+                    error="No intent pattern matched and LLM unavailable",
+                )
         
-        prompt = self._build_prompt(transcript)
-
-        last_error = "Unknown error"
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                raw = runtime.generate(
-                    prompt=prompt,
-                    grammar=self._grammar,
-                    max_tokens=256,
-                )
-                raw = raw.strip()
-
-                # Parse JSON
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError as exc:
-                    last_error = f"JSON parse error: {exc}"
-                    logger.warning(
-                        "Intent attempt %d/%d — JSON parse failed: %s",
-                        attempt + 1, MAX_RETRIES + 1, exc,
-                    )
-                    continue
-
-                # Validate against Pydantic models
-                intent = self._parse_intent(data, transcript)
-                if intent is None:
-                    last_error = f"Schema validation failed for data: {list(data.keys())}"
-                    logger.warning(
-                        "Intent attempt %d/%d — schema validation failed",
-                        attempt + 1, MAX_RETRIES + 1,
-                    )
-                    continue
-
-                # Sanitize
-                sanitized = self._sanitizer.sanitize(intent)
-                if isinstance(sanitized, SanitizationError):
-                    return IntentResult(
-                        success=False,
-                        intent=None,
-                        error=f"Sanitization rejected intent: {sanitized.reason}",
-                    )
-
-                logger.info(
-                    "Intent extracted successfully: %s (attempt %d)",
-                    intent.intent_type, attempt + 1,
-                )
-                return IntentResult(success=True, intent=sanitized, error=None)
-
-            except Exception as exc:
-                last_error = str(exc)
-                logger.warning(
-                    "Intent attempt %d/%d — exception: %s",
-                    attempt + 1, MAX_RETRIES + 1, exc,
-                )
-
-        logger.error(
-            "Intent extraction failed after %d attempts. Last error: %s",
-            MAX_RETRIES + 1, last_error,
-        )
-        
-        # Fallback to simple extraction
-        logger.info("Falling back to simple rule-based extraction")
-        return self._extract_simple(transcript)
+        # Skip grammar-based extraction due to compatibility issues
+        # Use free-form LLM generation instead
+        logger.info("Using free-form LLM extraction (grammar disabled)")
+        return self._extract_llm_freeform(transcript, runtime)
 
     def _build_prompt(self, transcript: str) -> str:
         return (
@@ -220,3 +178,50 @@ class IntentEngine:
         
         logger.info("Simple extraction successful: %s", intent.intent_type)
         return IntentResult(success=True, intent=sanitized, error=None)
+    
+    def _extract_llm_freeform(self, transcript: str, runtime) -> IntentResult:
+        """Extract intent using LLM without grammar constraints."""
+        prompt = self._build_prompt(transcript)
+        
+        try:
+            raw = runtime.generate(prompt=prompt, max_tokens=256)
+            raw = raw.strip()
+            
+            # Try to extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', raw)
+            if not json_match:
+                return IntentResult(
+                    success=False,
+                    intent=None,
+                    error="LLM did not return valid JSON",
+                )
+            
+            data = json.loads(json_match.group(0))
+            intent = self._parse_intent(data, transcript)
+            
+            if intent is None:
+                return IntentResult(
+                    success=False,
+                    intent=None,
+                    error="LLM JSON did not match intent schema",
+                )
+            
+            # Sanitize
+            sanitized = self._sanitizer.sanitize(intent)
+            if isinstance(sanitized, SanitizationError):
+                return IntentResult(
+                    success=False,
+                    intent=None,
+                    error=f"Sanitization rejected intent: {sanitized.reason}",
+                )
+            
+            logger.info("LLM extraction successful: %s", intent.intent_type)
+            return IntentResult(success=True, intent=sanitized, error=None)
+            
+        except Exception as exc:
+            logger.warning("LLM extraction failed: %s", exc)
+            return IntentResult(
+                success=False,
+                intent=None,
+                error=f"LLM extraction error: {exc}",
+            )

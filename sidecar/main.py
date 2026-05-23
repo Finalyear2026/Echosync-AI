@@ -45,6 +45,20 @@ async def lifespan(app: FastAPI):
     notification_service.set_broadcaster(manager)
     await manager.start_broadcaster()
     await notification_service.start_polling()
+    
+    # Pre-load STT model at startup for faster session start
+    logger.info("Pre-loading STT model...")
+    try:
+        import concurrent.futures
+        from stt.engine import STTEngine
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            global _stt_engine
+            _stt_engine = await loop.run_in_executor(pool, STTEngine)
+        logger.info("STT model pre-loaded successfully.")
+    except Exception as exc:
+        logger.warning("STT pre-load failed: %s", exc)
+    
     try:
         from llm.runtime import get_llm_runtime
         get_llm_runtime().startup_load()
@@ -143,7 +157,7 @@ async def session_start():
         logger.info("Session start: initializing pipeline...")
         loop = asyncio.get_event_loop()
 
-        # Initialize heavy components in thread pool
+        # Initialize components (STT already pre-loaded at startup)
         import concurrent.futures
         def _init_components():
             from audio.service import AudioService
@@ -151,7 +165,15 @@ async def session_start():
             from intent.engine import IntentEngine
             from stt.engine import STTEngine
 
-            stt = STTEngine()
+            # Use pre-loaded STT engine if available, otherwise create new one
+            global _stt_engine
+            if _stt_engine is None:
+                logger.info("STT not pre-loaded, loading now...")
+                stt = STTEngine()
+            else:
+                logger.info("Using pre-loaded STT engine")
+                stt = _stt_engine
+                
             router = SemanticRouter()
             intent = IntentEngine()
             audio = AudioService(stt_engine=stt)

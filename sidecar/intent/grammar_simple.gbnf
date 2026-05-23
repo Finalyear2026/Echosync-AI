@@ -1,0 +1,32 @@
+root ::= intent
+
+intent ::= "{" ws "\"intent_type\"" ws ":" ws intent-type ws "," ws "\"raw_transcript\"" ws ":" ws string ws "," ws fields ws "}"
+
+intent-type ::= "\"create_task\"" | "\"update_task\"" | "\"complete_task\"" | "\"schedule_meeting\"" | "\"set_reminder\""
+
+fields ::= field | field ws "," ws fields
+
+field ::= "\"title\"" ws ":" ws string
+        | "\"priority\"" ws ":" ws priority
+        | "\"due_at\"" ws ":" ws value
+        | "\"task_id\"" ws ":" ws number
+        | "\"title_hint\"" ws ":" ws value
+        | "\"start_at\"" ws ":" ws string
+        | "\"end_at\"" ws ":" ws value
+        | "\"attendees\"" ws ":" ws array
+        | "\"message\"" ws ":" ws string
+        | "\"trigger_at\"" ws ":" ws string
+
+priority ::= "\"low\"" | "\"medium\"" | "\"high\""
+
+value ::= string | "null"
+
+string ::= "\"" [^"]* "\""
+
+array ::= "[" ws "]" | "[" ws string-list ws "]"
+
+string-list ::= string | string ws "," ws string-list
+
+number ::= [0-9]+
+
+ws ::= [ \t\n\r]*

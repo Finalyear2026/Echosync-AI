@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_FILENAME = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 CONTEXT_WINDOW = 4096
-RAM_THRESHOLD_BYTES = 8 * 1024 ** 3  # 8 GB
+RAM_THRESHOLD_BYTES = 6 * 1024 ** 3  # 6 GB (lowered from 8GB for 7GB systems)
 IDLE_TIMEOUT_SECONDS = 5 * 60  # 5 minutes
 
 
@@ -76,8 +76,8 @@ def _validate_model_path(path: Path | str) -> None:
 
 
 def _available_ram() -> int:
-    """Return available system RAM in bytes."""
-    return psutil.virtual_memory().available
+    """Return total system RAM in bytes (not available, which can be misleading due to OS caching)."""
+    return psutil.virtual_memory().total
 
 
 # ---------------------------------------------------------------------------
@@ -100,11 +100,11 @@ class LLMRuntime:
         self._idle_timer: Optional[threading.Timer] = None
         self._high_ram: bool = _available_ram() >= RAM_THRESHOLD_BYTES
 
-        available_mb = _available_ram() // (1024 ** 2)
+        total_gb = _available_ram() // (1024 ** 3)
         logger.info(
-            "LLMRuntime initialised. Available RAM: %d MB. "
+            "LLMRuntime initialised. Total RAM: %d GB. "
             "High-RAM mode: %s.",
-            available_mb,
+            total_gb,
             self._high_ram,
         )
 
@@ -149,7 +149,7 @@ class LLMRuntime:
 
             available_mb = _available_ram() // (1024 ** 2)
             logger.info(
-                "Loading LLM model '%s'. Available RAM before load: %d MB.",
+                "Loading LLM model '%s'. Total RAM: %d MB.",
                 MODEL_FILENAME,
                 available_mb,
             )
@@ -297,10 +297,10 @@ class LLMRuntime:
         - RAM < 8 GB:  do nothing; the model will be loaded on the first
                        ``generate()`` call.
         """
-        available_mb = _available_ram() // (1024 ** 2)
+        total_gb = _available_ram() // (1024 ** 3)
         logger.info(
-            "startup_load() called. Available RAM: %d MB. High-RAM mode: %s.",
-            available_mb,
+            "startup_load() called. Total RAM: %d GB. High-RAM mode: %s.",
+            total_gb,
             self._high_ram,
         )
         if self._high_ram:

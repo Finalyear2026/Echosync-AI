@@ -30,13 +30,23 @@ class SimpleIntentExtractor:
         """
         text = transcript.lower().strip()
         
-        # Create Task patterns
+        # Create Task patterns (English + Urdu/Roman Urdu)
         task_patterns = [
+            # English
             r"create\s+(?:a\s+)?task\s+(?:to\s+)?(.+)",
             r"add\s+(?:a\s+)?task\s+(?:to\s+)?(.+)",
             r"make\s+(?:a\s+)?task\s+(?:to\s+)?(.+)",
+            r"new\s+task\s+(?:to\s+)?(.+)",
             r"task\s+(?:to\s+)?(.+)",
             r"todo\s+(.+)",
+            # Urdu/Roman Urdu
+            r"task\s+bana(?:o)?\s+(.+)",
+            r"kaam\s+bana(?:o)?\s+(.+)",
+            r"task\s+add\s+kar(?:o)?\s+(.+)",
+            r"kaam\s+add\s+kar(?:o)?\s+(.+)",
+            r"task\s+likho\s+(.+)",
+            r"bana\s+(?:do|dena)\s+task\s+(.+)",
+            r"add\s+kar(?:o)?\s+task\s+(.+)",
         ]
         
         for pattern in task_patterns:
@@ -54,12 +64,19 @@ class SimpleIntentExtractor:
                     due_at=due_at,
                 )
         
-        # Schedule Meeting patterns
+        # Schedule Meeting patterns (English + Urdu/Roman Urdu)
         meeting_patterns = [
+            # English
             r"schedule\s+(?:a\s+)?meeting\s+(.+)",
             r"set\s+(?:up\s+)?(?:a\s+)?meeting\s+(.+)",
             r"book\s+(?:a\s+)?meeting\s+(.+)",
             r"meeting\s+(.+)",
+            # Urdu/Roman Urdu
+            r"meeting\s+schedule\s+kar(?:o)?\s+(.+)",
+            r"meeting\s+fix\s+kar(?:o)?\s+(.+)",
+            r"meeting\s+set\s+kar(?:o)?\s+(.+)",
+            r"mulaqat\s+(?:schedule|fix|set)\s+kar(?:o)?\s+(.+)",
+            r"schedule\s+kar(?:o)?\s+meeting\s+(.+)",
         ]
         
         for pattern in meeting_patterns:
@@ -78,11 +95,18 @@ class SimpleIntentExtractor:
                     attendees=[],
                 )
         
-        # Set Reminder patterns
+        # Set Reminder patterns (English + Urdu/Roman Urdu)
         reminder_patterns = [
+            # English
             r"remind\s+me\s+(?:to\s+)?(.+)",
             r"set\s+(?:a\s+)?reminder\s+(?:to\s+)?(.+)",
             r"reminder\s+(?:to\s+)?(.+)",
+            # Urdu/Roman Urdu
+            r"reminder\s+set\s+kar(?:o)?\s+(.+)",
+            r"reminder\s+laga(?:o)?\s+(.+)",
+            r"yaad\s+dila(?:o)?\s+(.+)",
+            r"yaad\s+dihani\s+set\s+kar(?:o)?\s+(.+)",
+            r"mujhe\s+yaad\s+dila(?:o)?\s+(.+)",
         ]
         
         for pattern in reminder_patterns:
@@ -102,17 +126,28 @@ class SimpleIntentExtractor:
         return None
     
     def _extract_date(self, text: str) -> Optional[str]:
-        """Extract date/time expressions from text."""
+        """Extract date/time expressions from text (English + Urdu)."""
         text_lower = text.lower()
         
-        # Common date patterns
+        # Common date patterns (English + Urdu/Roman Urdu)
         date_patterns = [
+            # English
             r"tomorrow",
             r"today",
             r"next\s+\w+",  # next monday, next week
             r"at\s+\d+\s*(?:am|pm)",  # at 2 PM
             r"\d+\s*(?:am|pm)",  # 2 PM
             r"in\s+\d+\s+(?:hour|minute|day)s?",  # in 2 hours
+            # Urdu/Roman Urdu
+            r"kal",  # tomorrow
+            r"aaj",  # today
+            r"parson",  # day after tomorrow
+            r"subah",  # morning
+            r"sham",  # evening
+            r"raat",  # night
+            r"dophar",  # afternoon
+            r"\d+\s+baje",  # X o'clock
+            r"aglay\s+\w+",  # next (week/month)
         ]
         
         for pattern in date_patterns:
